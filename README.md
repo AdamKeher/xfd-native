@@ -22,6 +22,19 @@ crunched files (41 packer variants) decrunched to identical bytes, with the
 same packer name reported each time. The 118 files the original left alone
 gave the same result too.
 
+## Download (Windows)
+
+Prebuilt Windows x64 packages are on the
+[Releases](https://github.com/AdamKeher/xfd-native/releases) page. Unzip
+`xfd-native-<version>-windows-x64.zip` and run `xfdnative.exe` from a command
+prompt. It is a single self-contained executable with no installer and no
+extra DLLs.
+
+The 139 built-in slaves work straight away. To add the external slaves, run
+`python scripts\fetch_slaves.py` in the unzipped folder. That needs Python 3
+and [7-Zip](https://www.7-zip.org/), and it creates `slaves\` next to
+`xfdnative.exe`, where the program finds it automatically.
+
 ## Build
 
 Needs a C99 compiler and GNU make.

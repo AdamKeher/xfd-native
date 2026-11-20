@@ -1,0 +1,60 @@
+name: release
+
+# Push a tag like v0.1.0 to build the Windows package and attach it to a
+# draft GitHub release of that name. Review the draft, then publish it.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: make diffutils zip mingw-w64-x86_64-gcc
+
+      - name: Check the tag matches the Makefile version
+        run: |
+          want="v$(sed -n 's/^VERSION := //p' Makefile)"
+          [ "$GITHUB_REF_NAME" = "$want" ] || { echo "tag $GITHUB_REF_NAME != $want"; exit 1; }
+
+      - name: Build (static, no MinGW DLLs)
+        run: make LDFLAGS=-static
+
+      - name: Test
+        run: make check
+
+      - name: Package
+        run: |
+          name="xfd-native-${GITHUB_REF_NAME#v}-windows-x64"
+          mkdir -p "$name/scripts" "$name/m68k/extra"
+          cp build/xfdnative.exe "$name/"
+          strip "$name/xfdnative.exe"
+          cp README.md THIRD_PARTY.md "$name/"
+          cp LICENSE "$name/LICENSE.txt"
+          cp -r LICENSES "$name/"
+          cp scripts/fetch_slaves.py scripts/unlzx.py "$name/scripts/"
+          cp m68k/extra/OBJT "$name/m68k/extra/"
+          "$name/xfdnative.exe" --version
+          zip -r -9 "$name.zip" "$name"
+          sha256sum "$name.zip" > "$name.zip.sha256"
+          echo "PKG=$name" >> "$GITHUB_ENV"
+
+      - name: Create draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME "$env:PKG.zip" "$env:PKG.zip.sha256" `
+            --draft --title "xfd-native $($env:GITHUB_REF_NAME.Substring(1))" `
+            --notes "Draft: notes to follow."

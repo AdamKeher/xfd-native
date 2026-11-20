@@ -127,14 +127,26 @@ def download(url, dest, expected):
         raise SystemExit("SHA-256 mismatch for %s\n  got      %s\n  expected %s" % (url, got, expected))
 
 
+def find_7z():
+    found = shutil.which("7z")
+    if found:
+        return found
+    # The 7-Zip installer on Windows does not add itself to PATH
+    for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+        if base and os.path.isfile(os.path.join(base, "7-Zip", "7z.exe")):
+            return os.path.join(base, "7-Zip", "7z.exe")
+    return None
+
+
 def unlha(archive, dest):
     os.makedirs(dest, exist_ok=True)
-    if shutil.which("7z"):
-        subprocess.run(["7z", "x", "-y", "-o" + dest, archive], check=True, stdout=subprocess.DEVNULL)
+    sevenzip = find_7z()
+    if sevenzip:
+        subprocess.run([sevenzip, "x", "-y", "-o" + dest, archive], check=True, stdout=subprocess.DEVNULL)
     elif shutil.which("lha"):
         subprocess.run(["lha", "xqw=" + dest, archive], check=True)
     else:
-        raise SystemExit("Need 7z or lha to unpack %s" % archive)
+        raise SystemExit("Need 7-Zip (7z) or lha to unpack %s" % archive)
 
 
 def is_slave(path):

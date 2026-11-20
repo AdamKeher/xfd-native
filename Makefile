@@ -12,6 +12,8 @@ VERSION := 0.1.0
 
 CC      ?= cc
 CFLAGS  ?= -O2
+# LDFLAGS=-static gives a self-contained Windows .exe (no MinGW DLLs)
+LDFLAGS ?=
 WARN    := -Wall -Wextra
 BUILD   := build
 MUSASHI := vendor/musashi
@@ -90,7 +92,7 @@ $(BUILD)/%.o: src/%.c src/amiga.h src/emu.h src/xfdlib.h $(BUILD)/m68kops.h
 	$(CC) $(CFLAGS) $(WARN) $(MUSASHI_DEFS) -DXFDN_VERSION=\"$(VERSION)\" -I$(MUSASHI) -I$(BUILD) -c -o $@ $<
 
 $(TARGET): $(OBJ) $(M68K_OBJ) $(BUILD)/blob.o
-	$(CC) $(CFLAGS) -o $@ $^ -lm
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lm
 
 check: $(TARGET)
 	sh tests/run.sh $(TARGET)
