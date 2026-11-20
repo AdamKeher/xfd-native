@@ -3,7 +3,8 @@
 Decrunch Amiga executables and data files packed with classic crunchers
 (PowerPacker, Imploder, DefJam, TetraPack, Titanics, ByteKiller,
 StoneCracker, CrunchMania and a few hundred more) on Linux, macOS or Windows.
-No Amiga or emulator setup needed.
+It can also split executables that a linker joined together, such as a
+cracktro stuck in front of a game. No Amiga or emulator setup needed.
 
 xfd-native is the Amiga [xfdmaster.library](https://aminet.net/package/util/pack/xfdmaster)
 decrunching system rebuilt as a native command-line tool:
@@ -83,10 +84,12 @@ together" for XFD. See [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ```
 xfdnative [options] SOURCE [DEST]
+xfdnative --unlink [options] SOURCE [DEST1 DEST2]
 ```
 
 | Option | xfdDecrunch | Meaning |
 | --- | --- | --- |
+| `-u`, `--unlink` | (`xfdUnlink`) | split a linked executable into its two parts (see [Unlinking](#unlinking)) |
 | `-f`, `--force` | `FORCE` | overwrite DEST |
 | `-p`, `--linkpro` | `LP` | absolute-address images (e.g. DefJam) get xfdDecrunch's "professional" loader header, which makes them runnable executables again |
 | `-s`, `--linksimple` | `LS` | same with the simple loader header |
@@ -95,7 +98,7 @@ xfdnative [options] SOURCE [DEST]
 | `-a`, `--all-layers` | – | keep going while the result is crunched again |
 | `-x DIR`, `--slaves DIR` | – | load external slaves from DIR |
 | `--password TEXT`, `--key N` | – | for protected files (xfdDecrunch prompts instead) |
-| `-i`, `--identify` | – | only name the packer, don't decrunch |
+| `-i`, `--identify` | – | only name the packer (and the linker, if any); change nothing |
 | `-l`, `--list` | – | list all slaves |
 | `-t`, `--trace` | – | log emulator/library calls to stderr |
 
@@ -111,9 +114,39 @@ Writing "demo.unpacked" (409584 bytes)...
 Linking professional executable header...
 ```
 
-Exit codes: `0` decrunched (or not crunched), `10` recognised but decrunching
-failed, `20` usage or I/O error. (The original xfdDecrunch exits with 0 even
-when decrunching fails. xfd-native reports 10.)
+Exit codes: `0` done (or nothing to do: not crunched, not linked), `10`
+recognised but decrunching or unlinking failed, `20` usage or I/O error. (The
+original xfdDecrunch exits with 0 even when decrunching fails. xfd-native
+reports 10.)
+
+## Unlinking
+
+Scene tools often joined two programs into one executable: a "linker" stub
+runs the first program, then the second. A cracktro or intro was commonly
+glued in front of a game, or a text message in front of a program.
+`--unlink` recognises the linker and writes the two original programs back
+out, like the Amiga `xfdUnlink` command:
+
+```
+$ xfdnative -u linked part1 part2
+Reading "linked"...
+Unlinking "4EB9 Linker" files...
+Writing "part1"...
+Writing "part2"...
+```
+
+Supported linkers are the ones xfdmaster knows: 4EB9 and 4EF9 linkers, UFO,
+XLink 3.0, Glue 2.2/2.3, EXP 1.1 and ETA 0.91/0.99/1.00 text linkers,
+FileShield, ExeDescript 1.0 and FileDescript. `--identify` also reports a
+linker (`Linked: "4EB9 Linker"`). A crunched file has to be decrunched before
+it can be unlinked, and the parts may themselves be crunched.
+
+The unlink code is xfdmaster's original 68k code, run the same way as the
+decrunchers. It was checked on the 15 linked executables in the demoscene.au
+archive: 10 4EB9, 4 4EF9 and 1 ExeDescript. An independent checker confirmed
+that each part is exactly a run of the original's hunks (code, data and
+relocations, with hunk numbers renumbered) and that the linker stub is gone.
+For ExeDescript the parts are the program and its attached description text.
 
 ## How it works
 
@@ -139,16 +172,17 @@ budget, so broken input can't hang the tool.
 
 ## Differences from the Amiga original
 
-- Segment, linker (unlink), scan and strip-hunks functions are not ported.
-  Only buffer decrunching is supported.
+- Segment (already-loaded program), scan (search inside disk images or
+  memory dumps) and strip-hunks functions are not ported. Files are
+  decrunched and unlinked as buffers, which gives the same result for files.
 - The XPK slave is not included (it needs xpkmaster.library).
 - `xfdRelocate()` accepts `HUNK_END`. The OS4 C source it was ported from
   rejects it, which is a bug in that port.
 - Allocated memory is always zeroed, so output never depends on leftover
   memory contents.
-- Slave code is called with the same register contents the original 68k
-  library sets up, not just the documented arguments. At least ProPack
-  depends on this.
+- Slave and linker code is called with the same register contents the
+  original 68k library sets up, not just the documented arguments. ProPack
+  depends on this, and so do the 4EB9/4EF9 linker analysers (A1).
 
 ## Related work
 

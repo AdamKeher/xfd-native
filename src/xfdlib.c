@@ -18,6 +18,10 @@
  *   xfd_relocate                  src/main/xfdRelocate.c
  *   xfd_error_text                src/main/xfdGetErrorText.c
  *   alloc_object / free_object    src/main/xfdAllocObject.c, xfdFreeObject.c
+ *   xfd_recog_linker              src/main/xfdRecogLinker.c (and RecogLinker
+ *                                 in the 68k xfdmaster.a 39.16, libxad CVS)
+ *   xfd_unlink                    src/main/xfdUnlink.c (and 68k Unlink)
+ *   find_hunk                     src/xfdmaster.c        xfdGetHunk()
  *   xfd_lvo (68k entry points)    src/xfdmaster_68k.c
  *
  * Copyright (C) 1994-1998 Georg Hörmann
@@ -80,6 +84,7 @@ static void free_object(uint32_t object)
 }
 
 uint32_t xfd_alloc_bufferinfo(void) { return alloc_object(XFDOBJ_BUFFERINFO); }
+uint32_t xfd_alloc_linkerinfo(void) { return alloc_object(XFDOBJ_LINKERINFO); }
 
 /* ---- error texts ------------------------------------------------------------- */
 
@@ -555,6 +560,232 @@ Error:
 	return 0;
 }
 
+/* ---- linkers (unlinking) ----------------------------------------------------------- */
+
+/* Set up by xfd_init() from the blob header: the table of known linkers
+ * ("LinkerBrain") and the special FileDescript ("Diz") linker. */
+static uint32_t linker_brain, analyse_diz, unlink_diz, name_diz;
+
+/* find_hunk() = xfdGetHunk(): address of the type longword of hunk `num` in a hunk file,
+ * or 0. Port of xfdGetHunk() in src/xfdmaster.c (same as the 68k routine
+ * in xfdmaster.a 39.16). */
+static uint32_t find_hunk(uint32_t buffer, int64_t length, int32_t num)
+{
+	int32_t hunks;
+	int64_t size;
+	int16_t type;
+
+	if ((length -= 20) < 0 || emu_r32(buffer) != HUNK_HEADER || emu_r32(buffer + 4) != 0) return 0;
+	buffer += 8;
+	hunks = s16(emu_r16(buffer + 10)) - s16(emu_r16(buffer + 6)) + 1;
+	if (hunks <= num) return 0;
+	buffer += 12;
+
+	do {
+		uint32_t v;
+		if ((length -= 4) < 0) return 0;
+		v = emu_r32(buffer);
+		buffer += 4;
+		if ((v & (3u << 30)) == (3u << 30)) { /* a memory attribute longword follows */
+			if (length < 4) return 0;
+			length -= 4;
+			buffer += 4;
+		}
+	} while (--hunks > 0);
+
+	for (;;) {
+		if ((length -= 4) < 0) return 0;
+		type = s16(emu_r32(buffer));
+		buffer += 4;
+		switch (type) {
+		case HUNK_CODE:
+		case HUNK_DATA:
+			if ((num -= 1) < 0) return buffer - 4;
+			/* fall through */
+		case HUNK_NAME:
+		case HUNK_DEBUG:
+			if ((length -= 4) < 0) return 0;
+			size = (int64_t)emu_r32(buffer) << 2;
+			buffer += 4;
+			if ((length -= size) < 0) return 0;
+			buffer += (uint32_t)size;
+			break;
+		case HUNK_BSS:
+			if ((num -= 1) < 0) return buffer - 4;
+			if ((length -= 4) < 0) return 0;
+			buffer += 4;
+			break;
+		case HUNK_RELOC32:
+		case HUNK_SYMBOL:
+			for (;;) {
+				if ((length -= 4) < 0) return 0;
+				size = (int64_t)emu_r32(buffer) << 2;
+				buffer += 4;
+				if (size == 0) break;
+				size += 4;
+				if ((length -= size) < 0) return 0;
+				buffer += (uint32_t)size;
+			}
+			break;
+		case HUNK_END:
+			break;
+		default:
+			return 0;
+		}
+	}
+}
+
+/* xfdRecogLinker(). Follows the 68k RecogLinker of xfdmaster.a 39.16, which
+ * the OS4 C version (src/main/xfdRecogLinker.c) mirrors, including the
+ * registers the analyse functions see:
+ *   A0 = hunk 0 (its type longword), A1 = just past the matched pattern
+ *   (LB_Analyse4EF9 reads the linked hunk numbers at -28(a1) and -16(a1)),
+ *   A2 = next table entry, A3 = the analyse function, A5 = linkerinfo,
+ *   D2 = $deadbeef (the pattern wildcard). */
+int xfd_recog_linker(uint32_t li)
+{
+	uint32_t buffer = emu_r32(li + XFDLI_BUFFER);
+	uint32_t buflen = emu_r32(li + XFDLI_BUFLEN);
+	uint32_t hunk, p, a1 = 0, d0, d1 = 0;
+	emu_regs_t regs = {{0}};
+	int aborted;
+
+	if (buffer == 0 || buflen == 0) {
+		emu_w16(li + XFDLI_ERROR, XFDERR_NOSOURCE);
+		return 0;
+	}
+
+	/* FileDescript ("Diz") text linkers need not be executables. */
+	if (analyse_diz) {
+		regs.r[EMU_A0] = li;
+		regs.r[EMU_A0 + 5] = li;
+		regs.r[EMU_A6] = EMU_XFD_BASE;
+		if (call_slave(analyse_diz, &regs, &aborted) && regs.r[EMU_D0]) {
+			emu_w32(li + XFDLI_LINKERNAME, name_diz);
+			emu_w32(li + XFDLI_UNLINK, unlink_diz);
+			emu_w16(li + XFDLI_ERROR, XFDERR_OK);
+			return 1;
+		}
+		if (aborted && emu_depth() > 0) return 0;
+	}
+
+	hunk = find_hunk(buffer, buflen, 0);
+	if (hunk == 0) {
+		emu_w16(li + XFDLI_ERROR, XFDERR_NOHUNKHEADER);
+		return 0;
+	}
+
+	d0 = hunk;
+	for (p = linker_brain; p != 0;) {
+		int32_t count = s16(emu_r16(p));
+		uint32_t analyse;
+
+		p += 2;
+		if (count < 0) break;
+		d0 = (d0 & 0xffff0000u) | (uint32_t)(uint16_t)count;
+		if (count > 0) {
+			/* compare count+1 longwords; $deadbeef in the table matches anything */
+			int32_t left = count + 1;
+			int matched = 1;
+			a1 = hunk;
+			while (left > 0) {
+				uint32_t want = emu_r32(p);
+				uint32_t have = emu_r32(a1);
+				p += 4;
+				a1 += 4;
+				left--;
+				d1 = (want == 0xdeadbeefu) ? have : want;
+				if (d1 != have) {
+					matched = 0;
+					break;
+				}
+			}
+			if (!matched) { /* skip the rest of the pattern and the 3 pointers */
+				p += (uint32_t)left * 4 + 12;
+				continue;
+			}
+			d0 = (d0 & 0xffff0000u) | 0xffffu; /* dbne ran out: D0.w = -1 */
+		}
+
+		analyse = emu_r32(p);
+		emu_w32(li + XFDLI_UNLINK, emu_r32(p + 4));
+		emu_w32(li + XFDLI_LINKERNAME, emu_r32(p + 8));
+		p += 12;
+
+		memset(&regs, 0, sizeof(regs));
+		regs.r[EMU_D0] = d0;
+		regs.r[EMU_D0 + 1] = d1;
+		regs.r[EMU_D0 + 2] = 0xdeadbeefu;
+		regs.r[EMU_A0] = hunk;
+		regs.r[EMU_A0 + 1] = a1;
+		regs.r[EMU_A0 + 2] = p;
+		regs.r[EMU_A0 + 3] = analyse;
+		regs.r[EMU_A0 + 5] = li;
+		regs.r[EMU_A6] = EMU_XFD_BASE;
+		if (!call_slave(analyse, &regs, &aborted)) {
+			if (emu_depth() > 0) return 0;
+			d0 = 0;
+			continue;
+		}
+		d0 = regs.r[EMU_D0];
+		if (d0 != 0) {
+			int32_t amount = 1 + (int32_t)emu_r32(buffer + 16) - (int32_t)emu_r32(buffer + 12) -
+			                 (int32_t)emu_r32(li + XFDLI_HUNK2);
+			d0 = (uint32_t)amount;
+			if (amount > 0) {
+				emu_w32(li + XFDLI_AMOUNT2, (uint32_t)amount);
+				emu_w16(li + XFDLI_ERROR, XFDERR_OK);
+				return 1;
+			}
+		}
+	}
+
+	emu_w32(li + XFDLI_UNLINK, 0);
+	emu_w32(li + XFDLI_LINKERNAME, 0);
+	emu_w16(li + XFDLI_ERROR, XFDERR_UNKNOWN);
+	return 0;
+}
+
+/* xfdUnlink(). Follows the 68k Unlink of xfdmaster.a 39.16 / OS4
+ * src/main/xfdUnlink.c. The unlink function gets D0 = A1 = its own address,
+ * as with the original's `move.l xfdli_Unlink(a0),d0; move.l d0,a1; jsr (a1)`.
+ * The two parts are returned in xfdli_Save1/2 and SaveLen1/2. They point
+ * into the (rewritten) source buffer. */
+int xfd_unlink(uint32_t li)
+{
+	uint32_t fn;
+	emu_regs_t regs = {{0}};
+	int aborted;
+
+	if (emu_r32(li + XFDLI_LINKERNAME) != name_diz) {
+		uint32_t error = xfd_test_hunk_structure_flags(emu_r32(li + XFDLI_BUFFER),
+			emu_r32(li + XFDLI_BUFLEN), XFDTHF_NOOVERLAYS);
+		emu_w16(li + XFDLI_ERROR, error);
+		if (error != XFDERR_OK) return 0;
+	}
+
+	emu_w16(li + XFDLI_ERROR, XFDERR_NOTSUPPORTED);
+	fn = emu_r32(li + XFDLI_UNLINK);
+	if (fn == 0) return 0;
+
+	regs.r[EMU_D0] = fn;
+	regs.r[EMU_A0] = li;
+	regs.r[EMU_A0 + 1] = fn;
+	regs.r[EMU_A6] = EMU_XFD_BASE;
+	if (call_slave(fn, &regs, &aborted) && regs.r[EMU_D0]) {
+		emu_w16(li + XFDLI_ERROR, XFDERR_OK);
+		return 1;
+	}
+	if (aborted && emu_r16(li + XFDLI_ERROR) == XFDERR_OK) {
+		emu_w16(li + XFDLI_ERROR, XFDERR_CORRUPTEDDATA);
+	}
+	emu_w32(li + XFDLI_SAVE1, 0);
+	emu_w32(li + XFDLI_SAVE2, 0);
+	emu_w32(li + XFDLI_SAVELEN1, 0);
+	emu_w32(li + XFDLI_SAVELEN2, 0);
+	return 0;
+}
+
 /* ---- 68k entry points (xfdmaster.library jump table) ---------------------------- */
 
 static int xfd_lvo(int lvo)
@@ -597,8 +828,14 @@ static int xfd_lvo(int lvo)
 	case LVO_XFD_FREEOBJECT:
 		free_object(a1);
 		return 1;
+	case LVO_XFD_RECOGLINKER:
+		r = (uint32_t)xfd_recog_linker(a0);
+		break;
+	case LVO_XFD_UNLINK:
+		r = (uint32_t)xfd_unlink(a0);
+		break;
 	default:
-		return 0; /* segment, linker and scan functions are not provided */
+		return 0; /* segment and scan functions are not provided */
 	}
 	emu_set_reg(EMU_D0, r);
 	return 1;
@@ -639,6 +876,28 @@ int xfd_init(const uint8_t *blob, size_t len)
 		count++;
 	}
 	emu_w32(EMU_XFD_BASE + XFDM_FIRSTSLAVE, first);
+
+	/* Linker table: entries are a pattern length word (n: n+1 longwords, 0:
+	 * none, -1: end), the pattern, then analyse/unlink/name offsets
+	 * (SetupInternal's LinkerBrain loop). */
+	linker_brain = emu_r32(base + 8);
+	if (linker_brain) {
+		uint32_t p;
+		int32_t longs;
+		linker_brain += base;
+		p = linker_brain;
+		while ((longs = s16(emu_r16(p))) >= 0) {
+			p += 2;
+			if (longs > 0) p += (uint32_t)(longs + 1) * 4;
+			for (int i = 0; i < 3; i++, p += 4) {
+				uint32_t v = emu_r32(p);
+				if (v) emu_w32(p, v + base);
+			}
+		}
+	}
+	analyse_diz = emu_r32(base + 12) ? emu_r32(base + 12) + base : 0;
+	unlink_diz = emu_r32(base + 16) ? emu_r32(base + 16) + base : 0;
+	name_diz = emu_r32(base + 20) ? emu_r32(base + 20) + base : 0;
 
 	for (size_t i = 0; i < N_ERRORS; i++) error_text_addr[i] = emu_static_string(error_table[i].text);
 	emu_set_xfd_handler(xfd_lvo);

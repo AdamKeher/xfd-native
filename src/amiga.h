@@ -133,6 +133,23 @@
 #define XFDS_SIZEOF          40
 #define XFDS_VERSION_MAX     2
 
+/* struct xfdLinkerInfo */
+#define XFDLI_BUFFER     0
+#define XFDLI_BUFLEN     4
+#define XFDLI_LINKERNAME 8
+#define XFDLI_UNLINK     12
+#define XFDLI_RESERVED   16 /* UWORD */
+#define XFDLI_ERROR      18 /* UWORD */
+#define XFDLI_HUNK1      20
+#define XFDLI_HUNK2      24
+#define XFDLI_AMOUNT1    28
+#define XFDLI_AMOUNT2    32
+#define XFDLI_SAVE1      36
+#define XFDLI_SAVE2      40
+#define XFDLI_SAVELEN1   44
+#define XFDLI_SAVELEN2   48
+#define XFDLI_SIZEOF     52
+
 /* struct xfdForeMan (start of an external slave's first hunk) */
 #define XFDF_SECURITY  0
 #define XFDF_ID_OFS    4
@@ -191,6 +208,8 @@
 #define LVO_XFD_STRIPHUNKS              (-108)
 #define LVO_XFD_ALLOCOBJECT             (-114)
 #define LVO_XFD_FREEOBJECT              (-120)
+#define LVO_XFD_RECOGLINKER             (-126)
+#define LVO_XFD_UNLINK                  (-132)
 
 /* error codes */
 #define XFDERR_OK                 0x0000

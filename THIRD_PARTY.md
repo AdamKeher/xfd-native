@@ -118,7 +118,16 @@ line for line.
 | `xfd_error_text()` | `src/main/xfdGetErrorText.c` |
 | `alloc_object()`, `free_object()` | `src/main/xfdAllocObject.c`, `xfdFreeObject.c` |
 | `xfd_lvo()` (68k → C entry points) | `src/xfdmaster_68k.c` |
+| `xfd_recog_linker()` | `src/main/xfdRecogLinker.c`, cross-checked against `RecogLinker` in the 68k `xfdmaster.a` 39.16 |
+| `xfd_unlink()` | `src/main/xfdUnlink.c`, cross-checked against `Unlink` in `xfdmaster.a` 39.16 |
+| `find_hunk()` | `src/xfdmaster.c` `xfdGetHunk()` (same as the 68k `xfdGetHunk`) |
+| linker table relocation in `xfd_init()` | `src/xfdmaster.c` `SetupInternal()` (LinkerBrain loop) |
 | `main.c` `write_output()`, `decrunch_once()`, `link_data[]` | `src/utils/xfdDecrunch.c` `write_file()`, `decrunch_file()`, `link_data` |
+| `main.c` `run_unlink()` | `src/utils/xfdUnlink.c` `unlink()`; messages as in the original 68k `xfdUnlink` 1.01 (XFD 1.38 `C/xfdUnlink`) |
+
+The 68k linker code itself (`LinkerBrain`, `LB_Analyse*`, `LB_Unlink*`,
+`LB_AnalyseDiz`, `LB_UnlinkDiz`) is part of the unmodified `xfd-m68k.s` in
+§1 and runs in the emulator.
 
 **Deliberate differences from that source:**
 
@@ -141,6 +150,19 @@ line for line.
    D0 = A1 = the decrunch function's address. ProPack (RNC) depends on this:
    its decruncher re-runs its recogniser, which uses D0 as the buffer length.
    With D0 = 0 the packed hunks get copied raw.
+7. Linker calls follow the same original 68k register state. The analyse
+   functions get A0 = hunk 0, A1 = just past the matched table pattern,
+   A2 = next table entry, A3 = the function, A5 = linkerinfo and
+   D2 = `$deadbeef`. `LB_Analyse4EF9` reads the linked hunk numbers through
+   A1; that register was missing in OS4 53.3–53.6. For a table entry with no
+   pattern (ExeDescript), A1 keeps its previous value, as in the original.
+   Unlink functions get D0 = A1 = their own address.
+8. The `--unlink` "Unlinking" line names the linker
+   (`Unlinking "4EB9 Linker" files...`), as the original xfdUnlink 1.01
+   does. Disassembly confirms it pushes `xfdli_LinkerName` as the argument.
+   The OS4 rewrite prints the source file name there instead.
+9. The OS4 `xfdUnlink` command allocates a *buffer*-info object for the
+   linker info. xfd-native allocates a linker-info object.
 
 ## 5. External slaves (fetched, not included)
 
@@ -199,6 +221,16 @@ executables from the demoscene.au archive:
   The last is a damaged PowerPacker 3.0 file. Both versions print "Decrunch
   failed: corrupted data". The original then exits with 0, so the pipeline
   logged it as not packed. xfd-native exits with 10.
+
+**Unlinking (0.2.0).** The same archive contains 15 linked executables:
+10 4EB9, 4 4EF9 and 1 ExeDescript. All 15 unlink. An independent checker,
+which does not use xfd code, confirmed that each part of the 14 program
+linkers is exactly a contiguous run of the linked file's hunks (code/data
+bytes and relocations, hunk numbers renumbered) with the linker stub removed.
+For ExeDescript, part 1 is the program and part 2 its `FLID` description
+text. The original xfdUnlink was not run on these files, because the WinUAE
+pipeline only runs xfdDecrunch. A synthetic 4EF9-linked file in
+`tests/run.sh` must unlink into its two source programs byte for byte.
 
 The corpus is copyrighted demoscene productions, so it is not included.
 `tests/run.sh` runs the same check against any local corpus
