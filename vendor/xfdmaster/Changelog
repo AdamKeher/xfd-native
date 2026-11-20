@@ -1,0 +1,41 @@
+53.7 (11.9.2014)
+- Fixed another bug when calling linker Analyse functions (parameter in A1 was
+  missing as well).
+- Fixed LINKSIMPLE and LINKPRO code in xfdDecrunch.
+- Added missing FreeVec() call in xfdScan.
+- Wrote a replacement for the xfdUnlink command.
+- Added new API functions: xfdFault() and xfdPrintFault().
+- Made xfdDecrunch, xfdScan and xfdUnlink commands use the new xfdPrintFault()
+  function.
+
+53.6 (9.9.2014)
+- Fixed BZip2 external slave to open bzip2.library instead of bz2.library.
+- Removed unnecessary recursion and allocation of resources in xfdList.
+- Wrote a replacement for the xfdDecrunch command.
+
+53.5 (1.9.2014)
+- Added an Installer script.
+- Wrote a replacement for the xfdScan command.
+- Fixed a memory leak in the external GZip slave.
+- Implemented a new external BZip2 slave, making use of bzip2.library.
+
+53.4 (27.8.2014)
+- Wrote a replacement for the external GZip slave, making use of z.library.
+- Fixed missing newlines in V53.2 xfdLibInfo output.
+
+53.3 (27.8.2014)
+- Added ET_SaveParamRegs to all EmulateTags() calls.
+- RecogLinker() now passes parameters in the correct registers when calling
+  the Analyse functions (hunk start in A0, linkerinfo in A5).
+- Wrote a replacement for the xfdList command.
+
+53.2 (25.8.2014)
+- Recompiled CPic external slave.
+- Recompiled PacPic external slave.
+- Ported SZDD external slave.
+- Sets new XFDPFF_M68K flag for all slaves containing 680x0 code.
+- Wrote a replacement for the xfdLibInfo command.
+
+53.1 (24.8.2014)
+- First released version.
+

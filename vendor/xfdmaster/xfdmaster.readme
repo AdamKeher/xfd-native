@@ -1,0 +1,62 @@
+Short:        AmigaOS4 port of xfdmaster.library
+Author:       Georg Hoermann, Dirk Stoecker, Fredrik Wikstrom
+Uploader:     Fredrik Wikstrom <fredrik@a500.org>
+Type:         util/libs
+Version:      53.7
+Architecture: ppc-amigaos >= 4.1
+
+This is an AmigaOS 4.1 C rewrite/port of the LGPL xfdmaster.library source
+code made available as part of the libxad project on SourceForge:
+http://sf.net/projects/libxad/
+
+As almost all of the source code is in 100% assembler it would be a ridiculous
+amount of work to port all of the slaves/linkers by rewriting them in C so I
+have decided to leave most of them as 680x0 code and concentrate on converting
+just the main API functions to begin with.
+
+In it's current state all of the xfdmaster.library API functions are compiled
+as PPC native, as well as the following slaves:
+- XPK (internal)
+- BZip2
+- CPic
+- GZip
+- MMCMP
+- PacPic
+- SZDD
+
+and commands:
+- xfdDecrunch
+- xfdLibInfo
+- xfdList
+- xfdScan
+- xfdUnlink
+
+Requirements:
+
+- AmigaOS 4.1 or newer
+- An existing 680x0 installation of xfdmaster.library.
+  http://aminet.net/package/util/pack/xfdmaster
+
+Installation:
+
+Copy xfdmaster/bin/libs ALL LIBS:
+Copy xfdmaster/bin/c C:
+
+Changes:
+
+53.7 (11.9.2014)
+- Fixed another bug when calling linker Analyse functions (parameter in A1 was
+  missing as well).
+- Fixed LINKSIMPLE and LINKPRO code in xfdDecrunch.
+- Added missing FreeVec() call in xfdScan.
+- Wrote a replacement for the xfdUnlink command.
+- Added new API functions: xfdFault() and xfdPrintFault().
+- Made xfdDecrunch, xfdScan and xfdUnlink commands use the new xfdPrintFault()
+  function.
+
+53.6 (9.9.2014)
+- Fixed BZip2 external slave to open bzip2.library instead of bz2.library.
+- Removed unnecessary recursion and allocation of resources in xfdList.
+- Wrote a replacement for the xfdDecrunch command.
+
+See the Changelog file in the archive for a list of older changes.

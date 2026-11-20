@@ -1,0 +1,4 @@
+# Keep LF line endings in the repository (shell scripts break with CRLF).
+* text=auto eol=lf
+*.bin binary
+m68k/extra/OBJT binary

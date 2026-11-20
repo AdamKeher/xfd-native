@@ -1,0 +1,6 @@
+*.exe
+*.o
+/tests/corpus/
+build/
+slaves-catchall/
+slaves/

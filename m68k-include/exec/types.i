@@ -1,0 +1,68 @@
+; Minimal stand-in for the Amiga NDK's exec/types.i, written for xfd-native.
+; Only what the xfdmaster 68k sources need: the structure-offset macros.
+; Part of demoscene.au xfd-native; LGPL-2.1-or-later (see ../../THIRD_PARTY.md).
+
+	IFND	EXEC_TYPES_I
+EXEC_TYPES_I	SET	1
+
+STRUCTURE	MACRO		; name,startoffset
+\1		EQU	0
+SOFFSET		SET	\2
+		ENDM
+
+LABEL		MACRO
+\1		EQU	SOFFSET
+		ENDM
+
+BYTE		MACRO
+\1		EQU	SOFFSET
+SOFFSET		SET	SOFFSET+1
+		ENDM
+UBYTE		MACRO
+\1		EQU	SOFFSET
+SOFFSET		SET	SOFFSET+1
+		ENDM
+WORD		MACRO
+\1		EQU	SOFFSET
+SOFFSET		SET	SOFFSET+2
+		ENDM
+UWORD		MACRO
+\1		EQU	SOFFSET
+SOFFSET		SET	SOFFSET+2
+		ENDM
+BOOL		MACRO
+\1		EQU	SOFFSET
+SOFFSET		SET	SOFFSET+2
+		ENDM
+LONG		MACRO
+\1		EQU	SOFFSET
+SOFFSET		SET	SOFFSET+4
+		ENDM
+ULONG		MACRO
+\1		EQU	SOFFSET
+SOFFSET		SET	SOFFSET+4
+		ENDM
+APTR		MACRO
+\1		EQU	SOFFSET
+SOFFSET		SET	SOFFSET+4
+		ENDM
+CPTR		MACRO
+\1		EQU	SOFFSET
+SOFFSET		SET	SOFFSET+4
+		ENDM
+FPTR		MACRO
+\1		EQU	SOFFSET
+SOFFSET		SET	SOFFSET+4
+		ENDM
+STRUCT		MACRO		; name,size
+\1		EQU	SOFFSET
+SOFFSET		SET	SOFFSET+\2
+		ENDM
+
+; BITDEF prefix,name,bit  ->  prefixB_name = bit, prefixF_name = 1<<bit
+BITDEF		MACRO
+\1B_\2		EQU	\3
+\1F_\2		EQU	1<<\3
+		ENDM
+
+	ENDC

@@ -1,0 +1,26 @@
+; Minimal stand-in for the Amiga NDK's exec/memory.i, written for xfd-native.
+; Part of demoscene.au xfd-native; LGPL-2.1-or-later (see ../../THIRD_PARTY.md).
+
+	IFND	EXEC_MEMORY_I
+EXEC_MEMORY_I	SET	1
+
+	INCLUDE	"exec/types.i"
+
+MEMB_PUBLIC	EQU	0
+MEMB_CHIP	EQU	1
+MEMB_FAST	EQU	2
+MEMB_CLEAR	EQU	16
+MEMB_LARGEST	EQU	17
+MEMB_REVERSE	EQU	18
+MEMB_TOTAL	EQU	19
+
+MEMF_ANY	EQU	0
+MEMF_PUBLIC	EQU	1<<0
+MEMF_CHIP	EQU	1<<1
+MEMF_FAST	EQU	1<<2
+MEMF_CLEAR	EQU	1<<16
+MEMF_LARGEST	EQU	1<<17
+MEMF_REVERSE	EQU	1<<18
+MEMF_TOTAL	EQU	1<<19
+
+	ENDC
