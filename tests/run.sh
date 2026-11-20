@@ -74,7 +74,35 @@ if [ -f m68k/extra/OBJT ]; then
 		bad "OBJT slave decrunch: $(cat "$TMP/log")"
 fi
 
-# 7. optional corpus
+# 7. unlinking: a synthetic 4EF9-linked executable (linker stub that calls
+#    program A and jumps to program B) must split back into A and B exactly
+words 000003f3 00000000 00000004 00000000 00000003 00000005 00000003 00000002 \
+	00000002 000003e9 00000005 48e7fffe 4eb90000 00004cdf 7fff4ef9 00000000 \
+	000003ec 00000001 00000001 00000006 00000001 00000002 00000010 00000000 \
+	000003f2 000003e9 00000003 41f90000 00084e75 12345678 000003ec 00000001 \
+	00000001 00000002 00000000 000003f2 000003e9 00000002 43f90000 00004e75 \
+	000003ec 00000001 00000003 00000002 00000000 000003f2 000003ea 00000002 \
+	cafebabe deadc0de 000003f2 >"$TMP/linked"
+words 000003f3 00000000 00000001 00000000 00000000 00000003 000003e9 00000003 \
+	41f90000 00084e75 12345678 000003ec 00000001 00000000 00000002 00000000 \
+	000003f2 >"$TMP/progA"
+words 000003f3 00000000 00000002 00000000 00000001 00000002 00000002 000003e9 \
+	00000002 43f90000 00004e75 000003ec 00000001 00000001 00000002 00000000 \
+	000003f2 000003ea 00000002 cafebabe deadc0de 000003f2 >"$TMP/progB"
+"$BIN" -n -i "$TMP/linked" >"$TMP/log" 2>&1
+grep -q '^Linked: "4EF9 Linker"' "$TMP/log" && ok "--identify names the linker" ||
+	bad "--identify linker: $(cat "$TMP/log")"
+"$BIN" -n -f -u "$TMP/linked" "$TMP/part1" "$TMP/part2" >"$TMP/log" 2>&1
+if cmp -s "$TMP/part1" "$TMP/progA" && cmp -s "$TMP/part2" "$TMP/progB"; then
+	ok "--unlink splits a 4EF9-linked file into the original programs"
+else
+	bad "--unlink: $(cat "$TMP/log")"
+fi
+"$BIN" -n -u "$TMP/progA" >"$TMP/log" 2>&1; rc=$?
+[ $rc -eq 0 ] && grep -q "^Not linked" "$TMP/log" && ok "--unlink leaves unlinked files alone" ||
+	bad "--unlink on a plain file (rc=$rc): $(cat "$TMP/log")"
+
+# 8. optional corpus
 if [ -n "${XFD_TEST_CORPUS:-}" ] && [ -d "$XFD_TEST_CORPUS" ]; then
 	for f in "$XFD_TEST_CORPUS"/*; do
 		case "$f" in *.expected) continue ;; esac

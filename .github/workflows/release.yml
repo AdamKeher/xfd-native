@@ -40,7 +40,7 @@ jobs:
           mkdir -p "$name/scripts" "$name/m68k/extra"
           cp build/xfdnative.exe "$name/"
           strip "$name/xfdnative.exe"
-          cp README.md THIRD_PARTY.md "$name/"
+          cp README.md THIRD_PARTY.md CHANGELOG.md "$name/"
           cp LICENSE "$name/LICENSE.txt"
           cp -r LICENSES "$name/"
           cp scripts/fetch_slaves.py scripts/unlzx.py "$name/scripts/"

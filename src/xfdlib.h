@@ -30,6 +30,9 @@ uint32_t xfd_first_slave(void);
 
 /* xfdmaster.library API, operating on 68k addresses. */
 uint32_t xfd_alloc_bufferinfo(void);
+uint32_t xfd_alloc_linkerinfo(void);
+int xfd_recog_linker(uint32_t linkerinfo);
+int xfd_unlink(uint32_t linkerinfo);
 int xfd_recog_buffer(uint32_t bufferinfo);
 int xfd_decrunch_buffer(uint32_t bufferinfo);
 uint32_t xfd_test_hunk_structure_flags(uint32_t buffer, uint32_t length, uint32_t flags);

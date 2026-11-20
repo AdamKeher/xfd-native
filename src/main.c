@@ -5,8 +5,9 @@
  * the messages, and the LINKSIMPLE/LINKPRO loader headers (link_data) come
  * from xfdmaster_os4 53.7 src/utils/xfdDecrunch.c (decrunch_file(),
  * write_file()), whose header data was taken from the original
- * xfdDecrunch 1.9 (09.09.1999). The argument handling, test mode,
- * --all-layers, --list and the emulator setup are new.
+ * xfdDecrunch 1.9 (09.09.1999). --unlink follows src/utils/xfdUnlink.c, with
+ * the messages of the original 68k xfdUnlink 1.01. The argument handling,
+ * test mode, --all-layers, --identify, --list and the emulator setup are new.
  *
  * Copyright (C) 1994-1999 Georg Hörmann, Dirk Stöcker (xfdDecrunch)
  * Copyright (C) 2014 Fredrik Wikström (OS4 xfdDecrunch rewrite)
@@ -23,7 +24,7 @@
 #include "xfdlib.h"
 
 #ifndef XFDN_VERSION
-#define XFDN_VERSION "0.1.0"
+#define XFDN_VERSION "dev" /* set by the Makefile */
 #endif
 
 #define RC_OK    0  /* decrunched, or not crunched */
@@ -36,9 +37,9 @@ extern const size_t xfd_m68k_blob_len;
 /* ---- options ------------------------------------------------------------------ */
 
 static struct {
-	const char *source, *dest, *slaves, *password;
+	const char *source, *dest, *dest2, *slaves, *password;
 	unsigned long key;
-	int have_key, force, linkpro, linksimple, copyall, noextern, list, all_layers, identify;
+	int have_key, force, linkpro, linksimple, copyall, noextern, list, all_layers, identify, unlink;
 	unsigned long long max_cycles;
 	double timeout;
 } opt;
@@ -47,9 +48,14 @@ static void usage(FILE *out)
 {
 	fputs(
 		"Usage: xfdnative [options] SOURCE [DEST]\n"
-		"Decrunch an Amiga file packed with any cruncher known to xfdmaster.\n"
-		"Without DEST the file is recognised and test-decrunched, nothing is written.\n"
+		"       xfdnative --unlink [options] SOURCE [DEST1 DEST2]\n"
+		"Decrunch an Amiga file packed with any cruncher known to xfdmaster, or split\n"
+		"an executable that a linker joined from two programs.\n"
+		"Without DEST the file is recognised and tested, nothing is written.\n"
 		"\n"
+		"  -u, --unlink         split a linked executable into its two parts\n"
+		"                       (4EB9/4EF9, Glue, XLink, UFO, ETA/EXP text,\n"
+		"                       FileShield, ExeDescript, FileDescript)  (xfdUnlink)\n"
 		"  -f, --force          overwrite DEST if it exists            (xfdDecrunch FORCE)\n"
 		"  -p, --linkpro        give absolute-address images the\n"
 		"                       \"professional\" loader header          (xfdDecrunch LP)\n"
@@ -62,14 +68,15 @@ static void usage(FILE *out)
 		"                       or in its parent directory\n"
 		"      --password TEXT  password for protected files\n"
 		"      --key N          16/32-bit key for protected files (decimal or $hex)\n"
-		"  -i, --identify       only recognise the packer, don't decrunch\n"
+		"  -i, --identify       only name the packer (and any linker), change nothing\n"
 		"  -l, --list           list all slaves and exit\n"
 		"      --max-cycles N   68k cycle budget per file (default 4000000000)\n"
 		"      --timeout SECS   wall-clock budget per file (default 120)\n"
 		"  -t, --trace          log emulator and library calls to stderr\n"
 		"  -V, --version        show version and exit\n"
 		"\n"
-		"Exit codes: 0 decrunched or not crunched, 10 decrunch failed, 20 error.\n",
+		"Exit codes: 0 done (or nothing to do: not crunched / not linked),\n"
+		"            10 decrunching or unlinking failed, 20 error.\n",
 		out);
 }
 
@@ -103,6 +110,7 @@ static int parse_args(int argc, char **argv)
 		else if (!strcmp(a, "-a") || !strcmp(a, "--all-layers")) opt.all_layers = 1;
 		else if (!strcmp(a, "-l") || !strcmp(a, "--list")) opt.list = 1;
 		else if (!strcmp(a, "-i") || !strcmp(a, "--identify")) opt.identify = 1;
+		else if (!strcmp(a, "-u") || !strcmp(a, "--unlink")) opt.unlink = 1;
 		else if (!strcmp(a, "-t") || !strcmp(a, "--trace")) emu_set_trace(1);
 		else if (!strcmp(a, "-x") || !strcmp(a, "--slaves")) {
 			if (!(opt.slaves = NEXT_ARG())) return 0;
@@ -134,6 +142,7 @@ static int parse_args(int argc, char **argv)
 			return 0;
 		} else if (!opt.source) opt.source = a;
 		else if (!opt.dest) opt.dest = a;
+		else if (!opt.dest2) opt.dest2 = a;
 		else {
 			fprintf(stderr, "Unexpected argument %s\n", a);
 			return 0;
@@ -142,6 +151,11 @@ static int parse_args(int argc, char **argv)
 	}
 	if (opt.linkpro && opt.linksimple) {
 		fputs("You cannot link several headers.\n", stderr);
+		return 0;
+	}
+	if (opt.unlink ? (opt.dest && !opt.dest2) : opt.dest2 != NULL) {
+		fputs(opt.unlink ? "--unlink needs both DEST1 and DEST2 (or neither)\n"
+		                 : "Too many arguments (DEST2 is only used with --unlink)\n", stderr);
 		return 0;
 	}
 	return opt.list || opt.source;
@@ -252,6 +266,19 @@ static void init_link_data(void)
 
 static int write_all(FILE *f, const void *p, size_t n) { return n == 0 || fwrite(p, 1, n, f) == n; }
 
+/* Open an output file, honouring --force (the original commands ask). */
+static FILE *open_output(const char *fn)
+{
+	FILE *f;
+	if (!opt.force && file_exists(fn)) {
+		fprintf(stderr, "%s already exists (use --force to overwrite)\n", fn);
+		return NULL;
+	}
+	f = fopen(fn, "wb");
+	if (!f) perror(fn);
+	return f;
+}
+
 /* Port of write_file(): the output-format decisions for absolute-address
  * images live here. `data` is the decrunched image. */
 static int write_output(const char *fn, const uint8_t *data, uint32_t len, uint32_t bi)
@@ -261,16 +288,7 @@ static int write_output(const char *fn, const uint8_t *data, uint32_t len, uint3
 	int ok = 0;
 
 	printf("Writing \"%s\" (%lu bytes)...\n", fn, (unsigned long)len);
-
-	if (!opt.force && file_exists(fn)) {
-		fprintf(stderr, "%s already exists (use --force to overwrite)\n", fn);
-		return 0;
-	}
-	f = fopen(fn, "wb");
-	if (!f) {
-		perror(fn);
-		return 0;
-	}
+	if (!(f = open_output(fn))) return 0;
 
 	if (pflags & XFDPFF_ADDR) {
 		uint32_t decr = emu_r32(bi + XFDBI_DECRADDRESS);
@@ -405,6 +423,91 @@ static int decrunch_once(uint32_t bi, uint32_t src, uint32_t len)
 	return 1;
 }
 
+/* Copy a file's contents into emulated memory; 0 if it doesn't fit. */
+static uint32_t load_into_emu(const uint8_t *data, size_t len)
+{
+	uint32_t addr;
+	if (len == 0 || len >= EMU_STACK_LOW - EMU_HEAP_LOW) return 0;
+	addr = emu_alloc((uint32_t)len, MEMF_PUBLIC);
+	if (addr) emu_write_block(addr, data, len);
+	return addr;
+}
+
+/* xfdRecogLinker() on src/len; on success copies the linker name. */
+static int recog_linker(uint32_t li, uint32_t src, uint32_t len, char *name, size_t namelen)
+{
+	emu_w32(li + XFDLI_BUFFER, src);
+	emu_w32(li + XFDLI_BUFLEN, len);
+	if (!xfd_recog_linker(li)) return 0;
+	emu_read_string(name, namelen, emu_r32(li + XFDLI_LINKERNAME));
+	return 1;
+}
+
+/* Port of the xfdUnlink command (SOURCE DEST1 DEST2). The messages are those
+ * of the original xfdUnlink 1.01; like it (and unlike the OS4 rewrite) the
+ * "Unlinking" line names the linker, not the source file. */
+static int run_unlink(void)
+{
+	size_t len;
+	uint8_t *data = read_file(opt.source, &len);
+	uint32_t src, li;
+	char name[128];
+	const char *dests[2] = {opt.dest, opt.dest2};
+
+	if (!data) {
+		perror(opt.source);
+		return RC_FAIL;
+	}
+	printf("Reading \"%s\"...\n", opt.source);
+	src = load_into_emu(data, len);
+	free(data);
+	li = xfd_alloc_linkerinfo();
+	if ((len && !src) || !li) {
+		fputs(len >= EMU_STACK_LOW - EMU_HEAP_LOW ? "File too large\n" : "Out of emulated memory\n", stderr);
+		return RC_FAIL;
+	}
+
+	if (!len || !recog_linker(li, src, (uint32_t)len, name, sizeof(name))) {
+		puts("Not linked");
+		return RC_OK;
+	}
+	printf("Unlinking \"%s\" files...\n", name);
+	fflush(stdout);
+
+	if (!xfd_unlink(li)) {
+		printf("Unlinking failed: %s", xfd_error_text(emu_r16(li + XFDLI_ERROR)));
+		if (emu_abort_text()[0]) printf(" (68k emulation: %s)", emu_abort_text());
+		putchar('\n');
+		return RC_ERROR;
+	}
+
+	if (!opt.dest) {
+		printf("Unlinked OK (%lu + %lu bytes), nothing written\n",
+			(unsigned long)emu_r32(li + XFDLI_SAVELEN1), (unsigned long)emu_r32(li + XFDLI_SAVELEN2));
+		return RC_OK;
+	}
+	for (int i = 0; i < 2; i++) {
+		uint32_t part = emu_r32(li + XFDLI_SAVE1 + 4 * i);
+		uint32_t plen = emu_r32(li + XFDLI_SAVELEN1 + 4 * i);
+		uint8_t *buf = malloc(plen ? plen : 1);
+		FILE *f;
+		int ok;
+
+		printf("Writing \"%s\"...\n", dests[i]);
+		if (!buf) return RC_FAIL;
+		emu_read_block(buf, part, plen);
+		f = open_output(dests[i]);
+		ok = f && write_all(f, buf, plen);
+		if (f && fclose(f) != 0) ok = 0;
+		free(buf);
+		if (!ok) {
+			if (f) perror(dests[i]);
+			return RC_FAIL;
+		}
+	}
+	return RC_OK;
+}
+
 static int run(void)
 {
 	size_t len;
@@ -423,14 +526,13 @@ static int run(void)
 		return len ? RC_FAIL : RC_OK;
 	}
 
-	src = emu_alloc((uint32_t)len, MEMF_PUBLIC);
+	src = load_into_emu(data, len);
 	bi = xfd_alloc_bufferinfo();
 	if (!src || !bi) {
 		fputs("Out of emulated memory\n", stderr);
 		free(data);
 		return RC_FAIL;
 	}
-	emu_write_block(src, data, len);
 
 	for (;;) {
 		rc = decrunch_once(bi, src, (uint32_t)len);
@@ -459,6 +561,13 @@ static int run(void)
 
 	if (layers == 0) {
 		puts("Not crunched");
+		if (opt.identify) {
+			uint32_t li = xfd_alloc_linkerinfo();
+			char name[128];
+			if (li && recog_linker(li, src, (uint32_t)len, name, sizeof(name))) {
+				printf("Linked: \"%s\" (split it with --unlink)\n", name);
+			}
+		}
 		if (opt.dest && opt.copyall) {
 			int ok = write_output(opt.dest, data, (uint32_t)len, bi);
 			free(data);
@@ -558,7 +667,7 @@ int main(int argc, char **argv)
 		return RC_OK;
 	}
 
-	rc = run();
+	rc = opt.unlink ? run_unlink() : run();
 	fflush(stdout);
 	free(fallback);
 	return rc;

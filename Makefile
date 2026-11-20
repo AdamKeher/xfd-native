@@ -8,7 +8,7 @@
 #
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-VERSION := 0.1.0
+VERSION := 0.2.0
 
 CC      ?= cc
 CFLAGS  ?= -O2
