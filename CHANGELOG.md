@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-11-21)
 
 - **XPK.** XPK files (`XPKF`) decrunch through xfdmaster's own XPK slaves,
   built in from the unchanged `XPK.s`. xfd-native provides
