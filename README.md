@@ -23,6 +23,10 @@ crunched files (41 packer variants) decrunched to identical bytes, with the
 same packer name reported each time. The 118 files the original left alone
 gave the same result too.
 
+It also handles three newer packers that xfdmaster never knew:
+[Shrinkler](#shrinkler-cranker-and-l-packer), Cranker and L-Packer, through
+slaves written for xfd-native.
+
 ## Download (Windows)
 
 Prebuilt Windows x64 packages are on the
@@ -31,7 +35,8 @@ Prebuilt Windows x64 packages are on the
 prompt. It is a single self-contained executable with no installer and no
 extra DLLs.
 
-The 139 built-in slaves work straight away. To add the external slaves, run
+The 139 xfdmaster slaves and the Shrinkler, Cranker and L-Packer slaves work
+straight away. To add the external slaves, run
 `python scripts\fetch_slaves.py` in the unzipped folder. That needs Python 3
 and [7-Zip](https://www.7-zip.org/), and it creates `slaves\` next to
 `xfdnative.exe`, where the program finds it automatically.
@@ -45,10 +50,11 @@ make            # -> build/xfdnative   (build/xfdnative.exe on Windows)
 make check      # self-tests
 ```
 
-The internal slaves are prebuilt into `m68k/xfd-m68k.bin` and embedded in the
-binary, so the normal build needs no 68k assembler. To rebuild that blob from
-the assembly sources you need [vasm](http://sun.hasenbraten.de/vasm/)
-(`vasmm68k_mot`): `make blob`.
+The internal slaves are prebuilt into `m68k/xfd-m68k.bin`, and the extra
+slaves (OBJT, Shrinkler, Cranker, L-Packer) into `m68k/extra`. Both are
+embedded in the binary, so the normal build needs no 68k assembler. To
+rebuild them from the assembly sources you need
+[vasm](http://sun.hasenbraten.de/vasm/) (`vasmm68k_mot`): `make blob`.
 
 ## External slaves
 
@@ -80,6 +86,60 @@ The slaves are fetched rather than included because of their licences, for
 example "freely distributable for noncommercial use, keep all files
 together" for XFD. See [THIRD_PARTY.md](THIRD_PARTY.md).
 
+## Shrinkler, Cranker and L-Packer
+
+These packers are popular for demos and intros but came after the last XFD
+release. Their slaves are written for xfd-native (`m68k/src`, prebuilt in
+`m68k/extra`) and built into the binary. They load after the external
+slaves and count as external, so `-n` turns them off, and a file of the same
+name in the slave directory replaces one. They are plain 68000 xfd slaves,
+so on an Amiga they can be copied to `LIBS:xfd/`.
+
+| Packer | Supported | Names |
+| --- | --- | --- |
+| [Shrinkler](https://github.com/askeksa/Shrinkler) by Blueberry | 4.0–4.7 executables: default, mini (`-m`) and overlap (`-o`) headers, with any text, flash or commandline option. Data files written with `--header`. | Shrinkler, Shrinkler Mini, Shrinkler Overlap, Shrinkler Data |
+| [Cranker](https://aminet.net/package/util/pack/cranker) by bifat/TEK | Executables with any decranker. Data files (`-cd`, also with `-eo`). | Cranker, Cranker Data |
+| [L-Packer](https://github.com/arnaud-carre/L-Packer) by Leonard/Oxygene | 0.92–1.00 executables (LZ4, ZX0 or DEFLATE, with any flash or text option). `-data` files. | L-Packer LZ4/ZX0/Deflate, L-Packer Data LZ4/ZX0/Deflate |
+
+Data files come back byte for byte. These executable packers drop part of
+the original file, so the result is an equivalent executable rather than the
+original bytes:
+
+- **Shrinkler** keeps each hunk's contents, memory size and type, and its
+  relocations, and all of that comes back exactly. The first hunk is written
+  as CODE. In overlap mode the other hunks become DATA, or BSS if they are
+  empty. A hunk's data ends after its last nonzero longword, and the rest of
+  its memory is zero as before.
+- **Cranker** keeps contents and relocations. Hunks with data become CODE,
+  and each crunched hunk keeps the 4–252 bytes Cranker added to its memory
+  size for in-place decrunching.
+- **L-Packer** merges all hunks into one per memory type, so the result has
+  two hunks, and their memory sizes include L-Packer's in-place margin.
+
+A Cranker file is an AmigaDOS overlay executable. xfdmaster's hunk check,
+which runs before an executable packer's slave, rejects overlays, so the
+Cranker slaves are data slaves and `--identify` says "(data)".
+
+Each packer was built from source and run in all of its modes over real
+executables of 0.3–580 KB with up to 7 hunks, chip memory, BSS and
+relocations between hunks. Older releases were run too: Shrinkler 4.0, 4.1,
+4.4 and 4.6, and L-Packer 0.92–0.99. All of the more than 500 results matched their
+originals hunk by hunk (memory type and size, contents, relocations), or byte
+for byte for data files. The only failures were outputs that Shrinkler 4.0
+itself corrupted. In the same run, none of 1,547 other files was mistaken
+for one of these packers.
+
+Two upstream bugs are worth knowing about:
+
+- Cranker's 68k decrunchers count lengths in 16 bits. A literal run or match
+  over 64 KB, which `cranker -1` writes for poorly compressible data,
+  decrunches wrongly on an Amiga. xfd-native decodes it correctly.
+- Shrinkler 4.0 sometimes overwrites its own decrunch header, producing a
+  broken file. 4.1 fixed this.
+
+Not supported: Shrinkler `--data` files without `--header` (nothing marks
+them), and L-Packer 0.90 and 0.91, which store the packed data differently.
+
 ## Usage
 
 ```
@@ -94,7 +154,7 @@ xfdnative --unlink [options] SOURCE [DEST1 DEST2]
 | `-p`, `--linkpro` | `LP` | absolute-address images (e.g. DefJam) get xfdDecrunch's "professional" loader header, which makes them runnable executables again |
 | `-s`, `--linksimple` | `LS` | same with the simple loader header |
 | `-c`, `--copyall` | `CA` | write DEST even when SOURCE is not crunched |
-| `-n`, `--noextern` | `NE` | use built-in slaves only |
+| `-n`, `--noextern` | `NE` | use xfdmaster's internal slaves only (no external or extra slaves) |
 | `-a`, `--all-layers` | – | keep going while the result is crunched again |
 | `-x DIR`, `--slaves DIR` | – | load external slaves from DIR |
 | `--password TEXT`, `--key N` | – | for protected files (xfdDecrunch prompts instead) |

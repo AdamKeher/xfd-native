@@ -8,7 +8,7 @@
 #
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-VERSION := 0.2.0
+VERSION := 0.3.0
 
 CC      ?= cc
 CFLAGS  ?= -O2
@@ -70,15 +70,33 @@ $(BUILD)/blob.c: $(BLOB) $(BUILD)/bin2c$(EXE)
 $(BUILD)/blob.o: $(BUILD)/blob.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+# xfd-native's own external slaves, prebuilt in m68k/extra, are built in too
+EXTRA_SLAVES := $(sort $(wildcard m68k/extra/*))
+
+$(BUILD)/embed$(EXE): tools/embed.c | $(BUILD)
+	$(CC) -O2 -o $@ $<
+
+$(BUILD)/extra.c: $(EXTRA_SLAVES) $(BUILD)/embed$(EXE)
+	$(BUILD)/embed$(EXE) $@ $(EXTRA_SLAVES)
+
+$(BUILD)/extra.o: $(BUILD)/extra.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
 # Re-assemble the blob from vendor/xfdmaster/m68k (unmodified upstream source)
-# with our NDK-free headers in m68k-include/, and the public-domain OBJT
-# external slave from vendor/kyzer.
+# with our NDK-free headers in m68k-include/, the public-domain OBJT external
+# slave from vendor/kyzer, and xfd-native's own slaves from m68k/src (plain
+# 68000 code, so they also work with xfdmaster.library on an Amiga).
 VASM ?= vasmm68k_mot
+SLAVE_VASM = $(VASM) -quiet -Fhunkexe -nosym -devpac -guess-ext -m68000 \
+	-Im68k-include -Ivendor/xfdmaster/m68k/include -Im68k/src
 blob:
 	cd vendor/xfdmaster/m68k && $(VASM) -quiet -Fbin -pic -devpac -guess-ext \
 		-I../../../m68k-include -o ../../../$(BLOB) xfd-m68k.s
 	$(VASM) -quiet -Fhunkexe -nosym -devpac -guess-ext -Im68k-include \
 		-Ivendor/xfdmaster/m68k/include -o m68k/extra/OBJT vendor/kyzer/OBJT.asm
+	$(SLAVE_VASM) -o m68k/extra/Cranker m68k/src/Cranker.asm
+	$(SLAVE_VASM) -o m68k/extra/L-Packer m68k/src/L-Packer.asm
+	$(SLAVE_VASM) -o m68k/extra/Shrinkler m68k/src/Shrinkler.asm
 
 # Download and merge the external slaves (see scripts/fetch_slaves.py)
 PYTHON ?= python3
@@ -91,7 +109,7 @@ slaves:
 $(BUILD)/%.o: src/%.c src/amiga.h src/emu.h src/xfdlib.h $(BUILD)/m68kops.h
 	$(CC) $(CFLAGS) $(WARN) $(MUSASHI_DEFS) -DXFDN_VERSION=\"$(VERSION)\" -I$(MUSASHI) -I$(BUILD) -c -o $@ $<
 
-$(TARGET): $(OBJ) $(M68K_OBJ) $(BUILD)/blob.o
+$(TARGET): $(OBJ) $(M68K_OBJ) $(BUILD)/blob.o $(BUILD)/extra.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lm
 
 check: $(TARGET)
