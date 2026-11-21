@@ -1,4 +1,4 @@
-# xfd-native build. Needs a C99 compiler and GNU make.
+# xfd-native build. Needs a C99 and a C++17 compiler and GNU make.
 #
 #   make            build build/xfdnative
 #   make blob       re-assemble the 68k code in m68k/ from source (needs vasm)
@@ -12,11 +12,13 @@ VERSION := 0.3.0
 
 CC      ?= cc
 CFLAGS  ?= -O2
+CXXFLAGS ?= -O2
 # LDFLAGS=-static gives a self-contained Windows .exe (no MinGW DLLs)
 LDFLAGS ?=
 WARN    := -Wall -Wextra
 BUILD   := build
 MUSASHI := vendor/musashi
+ANCIENT := vendor/ancient
 
 ifeq ($(OS),Windows_NT)
   EXE := .exe
@@ -29,8 +31,8 @@ endif
 MUSASHI_DEFS := -DM68K_ILLG_HAS_CALLBACK=1
 
 TARGET  := $(BUILD)/xfdnative$(EXE)
-SRC     := src/main.c src/emu.c src/xfdlib.c
-OBJ     := $(SRC:src/%.c=$(BUILD)/%.o)
+SRC     := src/main.c src/emu.c src/xfdlib.c src/xpkmaster.c
+OBJ     := $(SRC:src/%.c=$(BUILD)/%.o) $(BUILD)/xpk.o
 M68K_OBJ := $(BUILD)/m68kcpu.o $(BUILD)/m68kops.o $(BUILD)/m68kdasm.o $(BUILD)/softfloat.o
 BLOB    := m68k/xfd-m68k.bin
 
@@ -58,6 +60,19 @@ $(BUILD)/m68kdasm.o: $(MUSASHI)/m68kdasm.c $(BUILD)/m68kops.h
 	$(CC) $(MUSASHI_CFLAGS) -c -o $@ $<
 $(BUILD)/softfloat.o: $(MUSASHI)/softfloat/softfloat.c $(BUILD)/m68kops.h
 	$(CC) $(MUSASHI_CFLAGS) -c -o $@ $<
+
+# ---- ancient (XPK decoding) -----------------------------------------------------
+
+ANCIENT_SRC := $(wildcard $(ANCIENT)/src/*.cpp $(ANCIENT)/src/common/*.cpp)
+ANCIENT_OBJ := $(patsubst $(ANCIENT)/src/%.cpp,$(BUILD)/ancient/%.o,$(ANCIENT_SRC))
+ANCIENT_CXXFLAGS := $(CXXFLAGS) -std=c++17 -fno-rtti -I$(ANCIENT)/src -I$(ANCIENT)/api -I$(ANCIENT)/api/ancient -w
+
+$(BUILD)/ancient/%.o: $(ANCIENT)/src/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(ANCIENT_CXXFLAGS) -c -o $@ $<
+
+$(BUILD)/xpk.o: src/xpk.cpp src/xpk.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -std=c++17 -fno-rtti $(WARN) -I$(ANCIENT)/api -c -o $@ $<
 
 # ---- 68k slave blob -----------------------------------------------------------
 
@@ -95,8 +110,10 @@ blob:
 	$(VASM) -quiet -Fhunkexe -nosym -devpac -guess-ext -Im68k-include \
 		-Ivendor/xfdmaster/m68k/include -o m68k/extra/OBJT vendor/kyzer/OBJT.asm
 	$(SLAVE_VASM) -o m68k/extra/Cranker m68k/src/Cranker.asm
+	$(SLAVE_VASM) -o m68k/extra/ImploderHH m68k/src/ImploderHH.asm
 	$(SLAVE_VASM) -o m68k/extra/L-Packer m68k/src/L-Packer.asm
 	$(SLAVE_VASM) -o m68k/extra/Shrinkler m68k/src/Shrinkler.asm
+	$(SLAVE_VASM) -Ivendor/xfdmaster/m68k/slaves -o m68k/extra/XPK m68k/src/XPK.asm
 
 # Download and merge the external slaves (see scripts/fetch_slaves.py)
 PYTHON ?= python3
@@ -109,8 +126,9 @@ slaves:
 $(BUILD)/%.o: src/%.c src/amiga.h src/emu.h src/xfdlib.h $(BUILD)/m68kops.h
 	$(CC) $(CFLAGS) $(WARN) $(MUSASHI_DEFS) -DXFDN_VERSION=\"$(VERSION)\" -I$(MUSASHI) -I$(BUILD) -c -o $@ $<
 
-$(TARGET): $(OBJ) $(M68K_OBJ) $(BUILD)/blob.o $(BUILD)/extra.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lm
+# linked by the C++ compiler, for ancient's C++ runtime
+$(TARGET): $(OBJ) $(M68K_OBJ) $(BUILD)/blob.o $(BUILD)/extra.o $(ANCIENT_OBJ)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^ -lm
 
 check: $(TARGET)
 	sh tests/run.sh $(TARGET)

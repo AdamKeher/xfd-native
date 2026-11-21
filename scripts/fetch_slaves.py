@@ -10,10 +10,12 @@ slave in DEST_DIR (default: ./slaves):
 
   1. XFD 1.38 (Aminet, 2003): the 103 slaves of the last official release
   2. Wanted Team slaves (Wayback Machine copies of their site): 12 formats
-     that are not in 1.38, plus ByteKillerClone 2.6 and Vice 2.2, which are
-     newer than the 1.38 copies. Older or equal versions are skipped. Seven
-     more game-specific catch-all slaves go to DEST_DIR-catchall instead
-     (see CATCH_ALL).
+     that are not in 1.38 from the 2008 copy, 7 more that came later (HOT!,
+     LIN, LZNP, LZSS X68k, Pac1, PAK+, UPX!) from the 2025 copy, plus
+     ByteKillerClone 2.6, NJMP 2.0 and Vice 2.2, which are newer than the
+     1.38 copies. Older or equal versions are skipped. Eight more
+     game-specific catch-all slaves go to DEST_DIR-catchall instead (see
+     CATCH_ALL).
   3. Kyzer's KennyGrant 1.2 (1.38 ships 1.0)
   4. Ronald van Dijk's ByteKillerData 1.19 (1.38 ships 1.18)
   5. Chris Young's LZMA slave 1.2a (Aminet)
@@ -34,6 +36,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -45,6 +48,9 @@ import unlzx  # noqa: E402
 # 2008-08-29 snapshot of the Wanted Team "others" page. The SHA-256 pins
 # below make sure the same files come back.
 WAYBACK = "https://web.archive.org/web/20080829181533id_/http://amiga.emucamp.com:80/wt/files/others/{name}"
+# Slaves added to the site after 2008, from its January 2025 captures (the
+# site moved to wt.exotica.org.uk, whose HTTPS certificate is broken).
+WAYBACK_2025 = "https://web.archive.org/web/20250114000000id_/http://wt.exotica.org.uk/files/others/{name}"
 
 # (label, url, sha256, {file in archive: name in slaves/ or None for "all slaves found"})
 SOURCES = [
@@ -76,17 +82,32 @@ WANTED_TEAM = [
     ("xfd_ThePowerUnit.lzx", "83ac0974cb7f973a544e980f3be2c590e98105464c036df446958248262cd2f3", "ThePowerUnit"),
     ("xfd_Vice.lzx", "be873d181aab41e2edc624994301b3f2b05ab7facebe16495f147e4cd944fe4f", "Vice"),
 ]
+# Later Wanted Team slaves (2004-2011), from WAYBACK_2025. NJMP 2.0 replaces
+# the NJMP 1.0 in XFD 1.38.
+WANTED_TEAM_2025 = [
+    ("xfd_BCKid.lzx", "440a5f9670439960126a6a4049db9d5f66e3b1d58567619d73133ed205772929", "BCKid"),
+    ("xfd_HOT!.lzx", "844bbf0196ef524f6139e478d582723d164ba100c638b16419439946f2495dd3", "HOT!"),
+    ("xfd_LIN.lzx", "0315e7a29a18508a149ac2637d5450f3c120ec3c5f6aaa02c3b0d1babc5c6374", "LIN"),
+    ("xfd_LZNP.lzx", "8636c1f651d02371f922d2ea143b6a3c63ca74f96cf63b6f3bcbf40382327534", "LZNP"),
+    ("xfd_LZSSX68k.lzx", "1095935d40eeb55b8984fa3eabd724d23cf0c09504b237ef141be6e9ac29ff1a", "LZSS X68k"),
+    ("xfd_NJMP.lzx", "a107b8bcbe93f117faac08094db03deacf0eb403f56f19f2c8ea6a6a7bd6519a", "NJMP"),
+    ("xfd_PAK+.lzx", "6a0754b1ae9eb4e04bfc0ffa3833e0d1676165decc45a78b0e8888cf9b4cbcc1", "PAK+"),
+    ("xfd_Pac1.lzx", "da94a4312931e62360e943812f5f00aba6cf0a096989f506cccabf1e8cd3d90c", "Pac1"),
+    ("xfd_UPX!.lzx", "cae9ab1e141cebe9b09e0a02aca294e5f5b87cf774400237b4ab32d564585c08", "UPX!"),
+]
 # Skipped Wanted Team archives, because XFD 1.38 has the same or a newer
 # version: ATM4, CATC, CNC, CRUNCH2A, DSC3, EDP1, IFF-HUFF, LOB,
-# MagneticFieldsCruncher, PP2S, RPck, TheChamp, packII.
+# MagneticFieldsCruncher, PP2S, RPck, TheChamp, packII. (Checked again
+# against the 2025 copies: none of them is newer.)
 
 # Game-specific slaves whose recogniser accepts (almost) any file. Each one
 # claimed 791-805 of 805 known-uncrunched files in a false-positive screen
 # (Amiga executables, already-decrunched files, random/text/zero data); all
-# other slaves here claimed none. They would hijack every unrecognised file,
+# other slaves here claimed none. BCKid, screened later on 6,588 uncrunched
+# files, claimed 6,505 of them. They would hijack every unrecognised file,
 # so they go to a separate directory for deliberate use on files known to
 # come from that game:  xfdnative -x slaves-catchall FILE ...
-CATCH_ALL = {"Agony demo", "DD2", "Gremlin", "MaxDesign", "ReadySoft", "Rubicon", "Simon"}
+CATCH_ALL = {"Agony demo", "BCKid", "DD2", "Gremlin", "MaxDesign", "ReadySoft", "Rubicon", "Simon"}
 
 SOURCES += [
     ("Kyzer KennyGrant 1.2", "https://www.kyzer.me.uk/pack/xfd/xfd_KennyGrant.lha",
@@ -194,11 +215,12 @@ def main():
                         raise SystemExit("%s: expected one xfd slave %s, found %d" % (label, inner, len(hits)))
                     installed[name] = (hits[0], label)
 
-        print("Fetching %d Wanted Team archives (Wayback Machine)" % len(WANTED_TEAM))
-        for name, digest, inner in WANTED_TEAM:
+        wanted = [(WAYBACK, e) for e in WANTED_TEAM] + [(WAYBACK_2025, e) for e in WANTED_TEAM_2025]
+        print("Fetching %d Wanted Team archives (Wayback Machine)" % len(wanted))
+        for base, (name, digest, inner) in wanted:
             archive = os.path.join(work, name)
             time.sleep(2)  # be gentle with the Wayback Machine
-            download(WAYBACK.format(name=name), archive, digest)
+            download(base.format(name=urllib.parse.quote(name)), archive, digest)
             out = os.path.join(work, name + ".d")
             unlzx.extract(archive, out)
             p = os.path.join(out, inner)

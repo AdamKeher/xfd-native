@@ -104,12 +104,15 @@ fi
 
 # 8. the built-in extra slaves (m68k/extra, sources in m68k/src): files made
 #    by the packers from tests/data/sample.asm and mini.asm. An empty slave
-#    directory keeps any installed external slaves out of the way.
+#    directory keeps any installed external slaves out of the way. xpk-none
+#    is sample.asm stored in an XPK file, which goes through xfdmaster's XPK
+#    slave and xfd-native's xpkmaster.library.
 D=tests/data
 mkdir "$TMP/noslaves"
 for f in shrinkler:Shrinkler shrinkler44:Shrinkler shrinkler-overlap:"Shrinkler Overlap" \
 	shrinkler-mini:"Shrinkler Mini" cranker:Cranker lpacker-lz4:"L-Packer LZ4" \
-	lpacker-zx0:"L-Packer ZX0" lpacker-deflate:"L-Packer Deflate"; do
+	lpacker-zx0:"L-Packer ZX0" lpacker-deflate:"L-Packer Deflate" \
+	imploderhh:"Imploder (hitchhikr)"; do
 	file=${f%%:*}
 	name=${f#*:}
 	rm -f "$TMP/out"
@@ -120,7 +123,8 @@ for f in shrinkler:Shrinkler shrinkler44:Shrinkler shrinkler-overlap:"Shrinkler 
 		bad "$name ($file): $(cat "$TMP/log")"
 	fi
 done
-for f in shrinkler.data:"Shrinkler Data" cranker.data:"Cranker Data" lpacker.data:"L-Packer Data Deflate"; do
+for f in shrinkler.data:"Shrinkler Data" cranker.data:"Cranker Data" lpacker.data:"L-Packer Data Deflate" \
+	xpk-none:"XPK Packed"; do
 	file=${f%%:*}
 	name=${f#*:}
 	rm -f "$TMP/out"

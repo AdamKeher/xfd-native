@@ -2,8 +2,9 @@
  * xfd-native: a minimal AmigaOS environment around the Musashi 68k core.
  *
  * Provides 16 MB of flat big-endian memory (68EC020, 24-bit bus), an
- * exec-style memory allocator, stub exec/dos/xfdmaster library bases whose
- * jump tables trap into C, and a nestable "call this 68k function" helper.
+ * exec-style memory allocator, stub exec/dos/xfdmaster/xpkmaster library
+ * bases whose jump tables trap into C, and a nestable "call this 68k
+ * function" helper.
  *
  * Copyright (C) 2026 the xfd-native authors.
  * SPDX-License-Identifier: LGPL-2.1-or-later
@@ -24,6 +25,7 @@
 #define EMU_EXEC_BASE  0x00002000u
 #define EMU_DOS_BASE   0x00003000u
 #define EMU_XFD_BASE   0x00003800u
+#define EMU_XPK_BASE   0x00003f00u /* xpkmaster.library, if a handler is set */
 #define EMU_SCRATCH    0x00004000u /* static strings etc., up to EMU_BLOB */
 #define EMU_BLOB       0x00010000u /* internal slave blob is loaded here */
 #define EMU_HEAP_LOW   0x00040000u /* heap: EMU_HEAP_LOW .. EMU_STACK_LOW */
@@ -109,6 +111,8 @@ int emu_depth(void);
  * emu_set_reg(EMU_D0, ...). Return 0 if the LVO is not implemented. */
 typedef int (*emu_lvo_handler)(int lvo);
 void emu_set_xfd_handler(emu_lvo_handler h);
+/* The same for xpkmaster.library. Without a handler OpenLibrary() fails. */
+void emu_set_xpk_handler(emu_lvo_handler h);
 
 /* Initialise memory, CPU and the library bases. */
 int emu_init(void);

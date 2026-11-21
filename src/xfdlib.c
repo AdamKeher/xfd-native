@@ -45,6 +45,7 @@
 
 #include "amiga.h"
 #include "emu.h"
+#include "xpkmaster.h"
 
 #define XFDOBJ_BUFFERINFO  1
 #define XFDOBJ_SEGMENTINFO 2
@@ -901,6 +902,7 @@ int xfd_init(const uint8_t *blob, size_t len)
 
 	for (size_t i = 0; i < N_ERRORS; i++) error_text_addr[i] = emu_static_string(error_table[i].text);
 	emu_set_xfd_handler(xfd_lvo);
+	emu_set_xpk_handler(xpk_lvo);
 	return count;
 }
 
