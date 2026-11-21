@@ -25,6 +25,7 @@ uint8_t *emu_mem;
 #define EXEC_TABLE_LOW (EMU_EXEC_BASE - 0x1000u)
 #define DOS_TABLE_LOW  (EMU_DOS_BASE - 0x0600u)
 #define XFD_TABLE_LOW  (EMU_XFD_BASE - 0x0400u)
+#define XPK_TABLE_LOW  (EMU_XPK_BASE - 0x0080u)
 #define TASK_STRUCT    EMU_SCRATCH            /* zeroed fake Process for FindTask */
 #define STRINGS_LOW    (EMU_SCRATCH + 0x400u) /* emu_static_string() area */
 
@@ -41,6 +42,7 @@ static double time_budget = 120.0;
 static uint64_t used_cycles;
 static clock_t call_started;
 static emu_lvo_handler xfd_handler;
+static emu_lvo_handler xpk_handler;
 static uint32_t strings_next = STRINGS_LOW;
 
 /* ---- Musashi memory interface ----------------------------------------------- */
@@ -291,7 +293,8 @@ static uint32_t library_for_name(const char *name)
 	if (strcmp(name, "exec.library") == 0) return EMU_EXEC_BASE;
 	if (strcmp(name, "dos.library") == 0) return EMU_DOS_BASE;
 	if (strcmp(name, "xfdmaster.library") == 0) return EMU_XFD_BASE;
-	return 0; /* e.g. xpkmaster.library: the slave reports a missing resource */
+	if (strcmp(name, "xpkmaster.library") == 0 && xpk_handler) return EMU_XPK_BASE;
+	return 0; /* the slave reports a missing resource */
 }
 
 static int exec_lvo(int lvo)
@@ -441,6 +444,11 @@ static int illegal_callback(int opcode)
 		if (trace) fprintf(stderr, "[emu] xfdmaster LVO %d\n", lvo);
 		ok = xfd_handler ? xfd_handler(lvo) : 0;
 		if (!ok) do_abort(EMU_ABORT_UNSUPPORTED, "xfdmaster.library LVO %d is not provided", lvo);
+	} else if (pc >= XPK_TABLE_LOW && pc < EMU_XPK_BASE) {
+		lvo = (int)pc - (int)EMU_XPK_BASE;
+		if (trace) fprintf(stderr, "[emu] xpkmaster LVO %d\n", lvo);
+		ok = xpk_handler ? xpk_handler(lvo) : 0;
+		if (!ok) do_abort(EMU_ABORT_UNSUPPORTED, "xpkmaster.library LVO %d is not provided", lvo);
 	} else {
 		do_abort(EMU_ABORT_EXCEPTION, "ILLEGAL instruction at $%06x", pc);
 	}
@@ -448,6 +456,7 @@ static int illegal_callback(int opcode)
 }
 
 void emu_set_xfd_handler(emu_lvo_handler h) { xfd_handler = h; }
+void emu_set_xpk_handler(emu_lvo_handler h) { xpk_handler = h; }
 
 /* ---- calls ------------------------------------------------------------------------ */
 
@@ -548,6 +557,7 @@ int emu_init(void)
 	make_library(EMU_XFD_BASE, XFD_TABLE_LOW, "xfdmaster.library", XFDM_VERSION, 15);
 	emu_w32(EMU_XFD_BASE + XFDM_EXECBASE, EMU_EXEC_BASE);
 	emu_w32(EMU_XFD_BASE + XFDM_DOSBASE, EMU_DOS_BASE);
+	make_library(EMU_XPK_BASE, XPK_TABLE_LOW, "xpkmaster.library", 5, 2);
 
 	free_spans.n = used_spans.n = 0;
 	spans_insert(&free_spans, 0, (span_t){EMU_HEAP_LOW, EMU_STACK_LOW - EMU_HEAP_LOW});

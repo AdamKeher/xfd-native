@@ -11,16 +11,18 @@ LGPL-2.1) and `LICENSES/`.
 | xfdmaster 68k slaves | `vendor/xfdmaster/` | Aminet `util/libs/xfdmaster_os4.lha` 53.7 | LGPL-2.1-or-later | no |
 | Assembled slave blob | `m68k/xfd-m68k.bin` | built from `vendor/xfdmaster/m68k` (see §1) | LGPL-2.1-or-later | n/a (build output) |
 | Musashi 68k core | `vendor/musashi/` | GitHub `kstenerud/Musashi` @ `313ebf1` | MIT | no |
+| ancient (XPK decoding) | `vendor/ancient/` | GitHub `temisu/ancient` @ `1491a35` (§12) | BSD-2-Clause; `src/BZIP2Table.hpp` under the bzip2 licence | no |
 | SoftFloat | `vendor/musashi/softfloat/` | John R. Hauser, bundled with Musashi | SoftFloat-2 | no |
 | Ported library code | `src/xfdlib.c`, `src/xfdlib.h` | rewritten from xfdmaster_os4 53.7 C sources (§4) | LGPL-2.1-or-later | port |
 | Ported command | `src/main.c` | xfdmaster_os4 53.7 `src/utils/xfdDecrunch.c` (§4) | LGPL-2.1-or-later | port and extension |
 | OBJT external slave source | `vendor/kyzer/OBJT.asm` | libxad CVS (GitHub mirror `ashang/libxad`) | Public Domain | no |
 | OBJT slave binary | `m68k/extra/OBJT` | built from `vendor/kyzer/OBJT.asm` (§8) | Public Domain | n/a (build output) |
 | LZX extractor | `scripts/unlzx.py` | Python port of libxad `portable/clients/LZX.c` (§9) | LGPL-2.1-or-later | port |
-| Shrinkler, Cranker, L-Packer slaves | `m68k/src/`, built into `m68k/extra/` | written for xfd-native (§11) | LGPL-2.1-or-later; the ZX0 decoder also carries zlib terms | — |
-| Packer test files | `tests/data/` | made with the packers from `tests/data/*.asm` (§11) | LGPL-2.1-or-later; packer headers as in §11 | — |
-| New code | `src/emu.*`, `src/amiga.h`, `tools/`, `scripts/fetch_slaves.py`, `tests/`, `Makefile`, `m68k-include/` | written for xfd-native | LGPL-2.1-or-later | — |
-| External slaves | not in the repo; `scripts/fetch_slaves.py` downloads them | Aminet, Wanted Team (Wayback), Kyzer, R. van Dijk (§5) | various, see §5 | not redistributed |
+| Shrinkler, Cranker, L-Packer, Imploder (hitchhikr) slaves | `m68k/src/`, built into `m68k/extra/` | written for xfd-native (§11) | LGPL-2.1-or-later; the ZX0 decoder also carries zlib terms | — |
+| XPK slave wrapper | `m68k/src/XPK.asm`, built into `m68k/extra/XPK` | wraps the unchanged `vendor/xfdmaster/m68k/slaves/XPK.s` (§12) | LGPL-2.1-or-later | — |
+| Packer test files | `tests/data/` | made with the packers from `tests/data/*.asm` (§11, §12) | LGPL-2.1-or-later; packer headers as in §11 | — |
+| New code | `src/emu.*`, `src/amiga.h`, `src/xpkmaster.*`, `src/xpk.*`, `tools/`, `scripts/fetch_slaves.py`, `tests/`, `Makefile`, `m68k-include/` | written for xfd-native | LGPL-2.1-or-later | — |
+| External slaves | not in the repo; `scripts/fetch_slaves.py` downloads them | Aminet, Wanted Team (Wayback), Kyzer, R. van Dijk, C. Young (§5) | various, see §5 | not redistributed |
 
 ---
 
@@ -47,12 +49,13 @@ LGPL-2.1) and `LICENSES/`.
   Devpac-style size suffixes the sources use (`move.b #x,ccr`, `dbra.b`,
   `btst.b #n,Dn`) without editing them. The output is one position-independent
   blob of 139 slave entries from 34 slave files. Upstream comments out the
-  XPK and MagneticFields slaves in `xfd-m68k.s`, and they stay out here.
+  XPK and MagneticFields slaves in `xfd-m68k.s`, and they stay out of the
+  blob. `XPK.s` is assembled on its own as an external slave instead (§12).
 - **Blob SHA-256:** `b5f3f0a811f0523d25cf0bb37494775966cd9eed6a08a88461fe5176a48fd298`
   (71,674 bytes)
 - **Coverage check:** every decruncher name in the 68k `xfdmaster.library`
   39.15 binary (XFD 1.38, 2003) is also in this blob. Only "XPK Packed"
-  (needs xpkmaster.library) and the linker/unlink handlers are absent.
+  (built separately, §12) and the linker/unlink handlers are absent.
 - **Newest upstream:** the libxad project's SourceForge site is gone. Its CVS
   survives in GitHub mirrors, for example https://github.com/ashang/libxad at
   commit `dbe67a865207e49cd917ad9170a11b9eaa83998a` ("init from sf.net libxad").
@@ -94,7 +97,10 @@ The slave sources `INCLUDE` a few Amiga NDK headers (`exec/types.i`,
 `exec/libraries.i`, `exec/memory.i`, `dos/dos.i`, `dos/doshunks.i`). The NDK
 is Commodore/Amiga copyright and is not redistributed. `m68k-include/` is a
 from-scratch replacement that holds only the macros and constants the slaves
-use.
+use. `xpk/xpk.i` stands in for the XPK developer kit's header, which `XPK.s`
+includes. Its tag, error and margin values are those of `xpk/xpk.h` (as in the
+MorphOS SDK), and `_LVOXpkUnpack` (-48) follows `xpkmaster_lib.fd`
+(`##bias 36`).
 
 **Verification:** the blob built with these headers is byte-identical to one
 built against the NDK headers that ship with the "Amiga C/C++ Compile, Debug &
@@ -175,8 +181,9 @@ Fetched on 2026-11-20.
 
 | Source | URL | Version | Archive SHA-256 | Licence as stated | Taken |
 | --- | --- | --- | --- | --- | --- |
-| XFD package 1.38 (Dirk Stöcker et al.) | https://aminet.net/util/pack/xfdmaster.lha | 1.38 / xfdmaster 39.15, 2003 | `4147a2b29a7d007ab5b5a5f855c2a8095c6a9d9cadcb4f238d86cd8ca1424d62` | "freely distributable for noncommercial use … keep all files together" | all 103 slaves in `xfd_User/Libs/xfd` (4 replaced by newer versions below) |
+| XFD package 1.38 (Dirk Stöcker et al.) | https://aminet.net/util/pack/xfdmaster.lha | 1.38 / xfdmaster 39.15, 2003 | `4147a2b29a7d007ab5b5a5f855c2a8095c6a9d9cadcb4f238d86cd8ca1424d62` | "freely distributable for noncommercial use … keep all files together" | all 103 slaves in `xfd_User/Libs/xfd` (5 replaced by newer versions below) |
 | Wanted Team (Don Adan, Mr.Larmer) | Wayback Machine copy of `http://amiga.emucamp.com/wt/files/others/xfd_*.lzx`, snapshot 2008-08-29 | slaves v2.0–2.6, 2000–2006 | per file in `fetch_slaves.py` | none stated; offered freely "with source code" | 12 formats not in 1.38: Alcatraz Packer, Alchemy, FUCK, George Kirkham, Huffy-Buffy, Hunt (HFRO), Imagitec, Pack-Fire, PCC 1.4, RA, SP20, ThePowerUnit. Newer than 1.38: ByteKillerClone 2.6, Vice 2.2 |
+| Wanted Team, later slaves | Wayback Machine copy of `http://wt.exotica.org.uk/files/others/xfd_*.lzx`, January 2025 captures (the site moved there; its HTTPS certificate is broken) | slaves v2.0–2.1, 2004–2011 | per file in `fetch_slaves.py` | as above | 7 formats not in 1.38: HOT!, LIN, LZNP (LZ by Nick Pelling), LZSS X68k, Pac1, PAK+ (Pegasus AT Development System), UPX! (two variants). Newer than 1.38: NJMP 2.0 (1.38 has 1.0). Catch-all: BCKid |
 | Kyzer (Stuart Caie) | https://www.kyzer.me.uk/pack/xfd/xfd_KennyGrant.lha | KennyGrant 1.2 (06.05.2000) | `716d3893fe6ff06f5b547cfa4fa8c4cdd9062c33e41f5bf9bc9a633bdb12cc41` | none in the file (his other slaves say Public Domain) | replaces KennyGrant 1.0 |
 | Ronald van Dijk | https://www.amiga-stuff.com/files/decrunchers/ByteKillerData.lha | ByteKillerData 1.19 (22.2.2004) | `36f670b5c6ce5d5cd66bc1a2dd1310c66818875e93183be10ef4d21c45118bcf` | "freeware … © Ronald van Dijk – All rights reserved" | replaces 1.18 |
 | Chris Young | https://aminet.net/util/pack/xfd_lzma.lha | 1.2a (68k slave 1.2, 2007) | `6ab754f9653ce037353ca81f3d59bd837bb1622a8123815641938c66ae9194d3` | none stated (as-is) | `OS3/lzma` as `LZMA` |
@@ -184,7 +191,10 @@ Fetched on 2026-11-20.
 
 Wanted Team archives where XFD 1.38 already has the same or a newer version
 were skipped: ATM4, CATC, CNC, CRUNCH2A, DSC3, EDP1, IFF-HUFF, LOB,
-MagneticFieldsCruncher, PP2S, RPck, TheChamp, packII.
+MagneticFieldsCruncher, PP2S, RPck, TheChamp, packII. On 2026-11-21 all 43
+archives on the current site were downloaded again and their slaves' version
+strings compared with the installed set. Apart from the nine above, none is
+newer.
 
 **False-positive screen.** Each newly added slave was loaded on its own and
 run against 805 files known not to be crunched: every executable WinUAE's
@@ -193,6 +203,12 @@ zero data. Eighteen slaves claimed none of them. Seven game-specific Wanted
 Team slaves claimed 791–805 each because their recognisers accept almost
 anything: Agony demo, DD2, Gremlin, MaxDesign, ReadySoft, Rubicon and Simon.
 They go to `slaves-catchall/` and are only used when passed explicitly.
+
+The later Wanted Team slaves were screened the same way against 6,588
+uncrunched files: the executables and data files from the author's own
+Amiga projects and disk images, plus random, text and zero data. BCKid, whose
+recogniser accepts anything, claimed 6,505 of them and goes to
+`slaves-catchall/`. The other eight claimed none.
 
 The authors of the XFD 1.38 slaves are listed in that archive's `README`:
 Georg Hörmann, Dirk Stöcker, Codetapper, Dexter & Bartman/Abyss, Don Adan and
@@ -252,11 +268,12 @@ The corpus is copyrighted demoscene productions, so it is not included.
   `91fa43803e6f7c2efaa4d33acfe184aa92da1e8acca395e4c57e9a925c422214`.
   `tests/run.sh` uses it for an end-to-end 68k test.
 
-## 11. Shrinkler, Cranker and L-Packer slaves (`m68k/src/`)
+## 11. Shrinkler, Cranker, L-Packer and Imploder (hitchhikr) slaves (`m68k/src/`)
 
 New 68000 code, assembled by `make blob` into `m68k/extra/Shrinkler`,
-`m68k/extra/Cranker` and `m68k/extra/L-Packer`. No upstream file is included.
-Each decoder was written for xfd-native, using these as references:
+`m68k/extra/Cranker`, `m68k/extra/L-Packer` and `m68k/extra/ImploderHH`. No
+upstream file is included. Each decoder was written for xfd-native, using
+these as references:
 
 - **Shrinkler** (`shrinkler.i`): a port of the range decoder in the decrunch
   headers and `ShrinklerDecompress.S` of Shrinkler 4.7
@@ -275,6 +292,12 @@ Each decoder was written for xfd-native, using these as references:
   Emmanuel Marty (salvador, zlib licence), and its zlib notice is kept in
   `lz4zx0.i` as that licence requires. The DEFLATE decoder follows the
   structure of `puff.c` by Mark Adler.
+- **Imploder (hitchhikr)** (`ImploderHH.asm`): the file layout follows
+  `src/amiga_parser.c` and `src/amiga_depacker.s` of Imploder 1.4d
+  (https://github.com/hitchhikr/imploder, commit `f5cece2`, BSD-2-Clause,
+  © 2026 Franck Charlet). The slave has no decoder of its own: each hunk is
+  an `IMP!` stream, which it passes to xfdmaster's Imploder Data slave
+  through `xfdRecogBuffer()`/`xfdDecrunchBuffer()`.
 
 The packed files in `tests/data/` were made from `tests/data/sample.asm` and
 `mini.asm` with Shrinkler 4.7 and 4.4, Cranker 0.72 and L-Packer 1.00. They
@@ -285,14 +308,56 @@ contain those packers' decrunch headers:
 - Cranker's are public domain.
 - L-Packer's are MIT; its licence is in `LICENSES/L-Packer-MIT.txt`.
 
+`tests/data/imploderhh` is `tests/data/sample` packed by hitchhikr's Imploder
+1.4d. It contains that packer's overlay depacker, which is BSD-2-Clause; its
+licence is in `LICENSES/Imploder-hitchhikr-BSD-2-Clause.txt`.
+
+## 12. XPK: ancient and xpkmaster.library (`vendor/ancient/`, `src/xpk*`)
+
+- **Repository:** https://github.com/temisu/ancient
+- **Commit:** `1491a35` (2026-11-05, six commits after v2.3.0). They include
+  fixes to its overflow checks.
+- **Fetched:** 2026-11-21
+- **Copyright:** © 2017–2026 Teemu Suutari
+- **Licence:** BSD-2-Clause, in `LICENSES/ancient-BSD-2-Clause.txt`.
+  `src/BZIP2Table.hpp` is from bzip2 (© Julian R Seward), under the bzip2
+  licence in `LICENSES/bzip2.txt`.
+- **Taken unmodified:** `src/` (without `src/attic`), `api/`, `LICENSE`,
+  `LICENSE.bzip2` and `README.md`. Every file is byte-identical to the
+  upstream commit and listed in `vendor/MANIFEST.sha256`.
+- **Build:** every `.cpp` file is compiled with `-std=c++17 -fno-rtti`, and
+  the program is linked by the C++ compiler. Only the public API
+  (`api/ancient/ancient.hpp`) is used, from `src/xpk.cpp`.
+
+xfdmaster's XPK slaves (`vendor/xfdmaster/m68k/slaves/XPK.s`, unchanged) call
+xpkmaster.library's `XpkUnpack()`. `src/xpkmaster.c` provides a library base
+for it, with the same trap mechanism as the other emulated libraries, and
+implements `XpkUnpack()` on memory buffers: it reads the tag list
+(`XPK_InBuf`, `XPK_InLen`, `XPK_OutBuf`, `XPK_OutBufLen`, `XPK_GetOutBuf`,
+`XPK_GetOutLen`, `XPK_GetOutBufLen`, `XPK_GetError`, `XPK_OutMemType`;
+`TAG_MORE`, `TAG_SKIP` and `TAG_IGNORE`) and returns xpkmaster's error codes.
+`src/xpk.cpp` decodes through ancient with verification on (header and chunk
+checksums, and the copy of the first 16 decoded bytes in the header).
+`m68k/src/XPK.asm` wraps `XPK.s` in an xfdForeman header so that it loads as
+an external slave.
+
+**Verification:** all 52 XPK files in ancient's test set
+(`testing/test_files/*.xpkf`, at least one for each of the 51 implemented
+sub-formats) decrunch through the 68k slave to their originals byte for byte.
+Corrupted, truncated and unimplemented-format files give "corrupted data",
+"buffer truncated" and "missing resource". Encrypted files ask for a password
+and then give "not supported".
+`tests/data/xpk-none` is `tests/data/sample.asm` stored with the NONE method,
+written for xfd-native from the XPK file format.
+
 ## 9. LZX extractor (`scripts/unlzx.py`)
 
 A Python port of the LZX client of xadmaster.library, `portable/clients/LZX.c`
 ("LZX 1.10 (21.2.2004)", Dirk Stöcker, LGPL-2.1-or-later), from the same
 libxad mirror. It derives in turn from unlzx.c by Oliver Gantert and David
 Tritscher. It is needed only to unpack the Wanted Team `.lzx` archives. Every
-extracted file is CRC-32 checked, and all 35 Wanted Team archives extract
-with matching CRCs.
+extracted file is CRC-32 checked, and every Wanted Team archive, from both
+the 2008 and the 2025 copies of their site, extracts with matching CRCs.
 
 ## 10. Related work
 

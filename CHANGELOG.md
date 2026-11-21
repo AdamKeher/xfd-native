@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **XPK.** XPK files (`XPKF`) decrunch through xfdmaster's own XPK slaves,
+  built in from the unchanged `XPK.s`. xfd-native provides
+  xpkmaster.library's `XpkUnpack()` and decodes with Teemu Suutari's ancient
+  library (BSD-2-Clause, `vendor/ancient`): all 51 sub-formats it implements,
+  including SQSH, NUKE, IMPL, RAKE and BZP2. Encrypted XPK files are not
+  supported. The build now needs a C++17 compiler as well.
+- **Imploder (hitchhikr).** New slave for executables packed by hitchhikr's
+  Imploder 1.2–1.4d (2026). Its data files already worked as Imploder Data.
+- **More Wanted Team slaves.** `fetch_slaves.py` adds HOT!, LIN, LZNP,
+  LZSS X68k, Pac1, PAK+ and UPX! from the 2025 copy of their site, and
+  replaces NJMP 1.0 with 2.0. The catch-all BCKid slave goes to
+  `slaves-catchall/`. With the external set and the new built-in slaves
+  there are 334 slaves in total (was 323).
+- New tests: an XPK file and a file packed by hitchhikr's Imploder.
+
 ## 0.3.0 (2026-11-21)
 
 - **Shrinkler, Cranker and L-Packer.** New slaves, written for xfd-native in
