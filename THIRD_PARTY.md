@@ -17,6 +17,8 @@ LGPL-2.1) and `LICENSES/`.
 | OBJT external slave source | `vendor/kyzer/OBJT.asm` | libxad CVS (GitHub mirror `ashang/libxad`) | Public Domain | no |
 | OBJT slave binary | `m68k/extra/OBJT` | built from `vendor/kyzer/OBJT.asm` (§8) | Public Domain | n/a (build output) |
 | LZX extractor | `scripts/unlzx.py` | Python port of libxad `portable/clients/LZX.c` (§9) | LGPL-2.1-or-later | port |
+| Shrinkler, Cranker, L-Packer slaves | `m68k/src/`, built into `m68k/extra/` | written for xfd-native (§11) | LGPL-2.1-or-later; the ZX0 decoder also carries zlib terms | — |
+| Packer test files | `tests/data/` | made with the packers from `tests/data/*.asm` (§11) | LGPL-2.1-or-later; packer headers as in §11 | — |
 | New code | `src/emu.*`, `src/amiga.h`, `tools/`, `scripts/fetch_slaves.py`, `tests/`, `Makefile`, `m68k-include/` | written for xfd-native | LGPL-2.1-or-later | — |
 | External slaves | not in the repo; `scripts/fetch_slaves.py` downloads them | Aminet, Wanted Team (Wayback), Kyzer, R. van Dijk (§5) | various, see §5 | not redistributed |
 
@@ -249,6 +251,39 @@ The corpus is copyrighted demoscene productions, so it is not included.
   -I m68k-include -I vendor/xfdmaster/m68k/include`. Output SHA-256
   `91fa43803e6f7c2efaa4d33acfe184aa92da1e8acca395e4c57e9a925c422214`.
   `tests/run.sh` uses it for an end-to-end 68k test.
+
+## 11. Shrinkler, Cranker and L-Packer slaves (`m68k/src/`)
+
+New 68000 code, assembled by `make blob` into `m68k/extra/Shrinkler`,
+`m68k/extra/Cranker` and `m68k/extra/L-Packer`. No upstream file is included.
+Each decoder was written for xfd-native, using these as references:
+
+- **Shrinkler** (`shrinkler.i`): a port of the range decoder in the decrunch
+  headers and `ShrinklerDecompress.S` of Shrinkler 4.7
+  (https://github.com/askeksa/Shrinkler, © 1999–2022 Aske Simon
+  Christensen). The decompression code's licence: "free to use, in whole or
+  in part, modified or as is, for any legal purpose". The stream layouts are
+  taken from `cruncher/HunkFile.h` and the headers of releases 4.0–4.7.
+- **Cranker** (`lzo.i`): an LZO1X decoder written from the format as
+  Cranker's public domain `decruncher.asm` decodes it, with the checks of
+  `lzo1x_decompress_safe()`. The executable layout follows `decranker.asm`
+  (public domain) in Cranker 0.72 (Aminet `util/pack/cranker`, © Timm S.
+  Müller).
+- **L-Packer** (`lz4zx0.i`, `inflate.i`): the file layout follows L-Packer
+  1.00 (https://github.com/arnaud-carre/L-Packer, MIT, © 2025 Arnaud Carré).
+  The LZ4 decoder is new. The ZX0 decoder follows `unzx0_68000.S` by
+  Emmanuel Marty (salvador, zlib licence), and its zlib notice is kept in
+  `lz4zx0.i` as that licence requires. The DEFLATE decoder follows the
+  structure of `puff.c` by Mark Adler.
+
+The packed files in `tests/data/` were made from `tests/data/sample.asm` and
+`mini.asm` with Shrinkler 4.7 and 4.4, Cranker 0.72 and L-Packer 1.00. They
+contain those packers' decrunch headers:
+
+- Shrinkler's licence allows distributing them "in binary form as part of an
+  Amiga executable" without restriction.
+- Cranker's are public domain.
+- L-Packer's are MIT; its licence is in `LICENSES/L-Packer-MIT.txt`.
 
 ## 9. LZX extractor (`scripts/unlzx.py`)
 

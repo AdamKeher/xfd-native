@@ -34,6 +34,15 @@
 extern const unsigned char xfd_m68k_blob[];
 extern const size_t xfd_m68k_blob_len;
 
+/* xfd-native's own external slaves (m68k/extra), built in by tools/embed */
+struct xfd_embedded {
+	const char *name;
+	const unsigned char *data;
+	size_t size;
+};
+extern const struct xfd_embedded xfd_embedded_slaves[];
+extern const size_t xfd_embedded_slaves_count;
+
 /* ---- options ------------------------------------------------------------------ */
 
 static struct {
@@ -61,7 +70,8 @@ static void usage(FILE *out)
 		"                       \"professional\" loader header          (xfdDecrunch LP)\n"
 		"  -s, --linksimple     same, with the simple loader header      (xfdDecrunch LS)\n"
 		"  -c, --copyall        write DEST even if SOURCE is not crunched (xfdDecrunch CA)\n"
-		"  -n, --noextern       don't use external slaves              (xfdDecrunch NE)\n"
+		"  -n, --noextern       don't use external slaves, including   (xfdDecrunch NE)\n"
+		"                       the built-in Shrinkler/Cranker/L-Packer ones\n"
 		"  -a, --all-layers     keep decrunching while the result is crunched again\n"
 		"  -x, --slaves DIR     load external slaves (LIBS:xfd) from DIR\n"
 		"                       default: $XFD_SLAVES, else 'slaves' next to the program\n"
@@ -655,6 +665,26 @@ int main(int argc, char **argv)
 			free(fallback);
 			return RC_FAIL;
 		}
+	}
+	/* The built-in extra slaves load after the directory, as if they were
+	 * more files in it. A file of the same name in the directory wins. */
+	for (size_t i = 0; !opt.noextern && i < xfd_embedded_slaves_count; i++) {
+		const struct xfd_embedded *e = &xfd_embedded_slaves[i];
+		int added;
+		if (slaves) {
+			size_t n = strlen(slaves) + strlen(e->name) + 2;
+			char *path = malloc(n);
+			int shadowed = 0;
+			if (path) {
+				snprintf(path, n, "%s/%s", slaves, e->name);
+				shadowed = file_exists(path);
+				free(path);
+			}
+			if (shadowed) continue;
+		}
+		added = xfd_load_external_mem(e->data, e->size);
+		if (emu_trace_enabled()) fprintf(stderr, "[xfd] built-in %s: %d slave(s)\n", e->name, added);
+		external += added;
 	}
 	if (emu_trace_enabled()) {
 		fprintf(stderr, "[xfd] %d internal and %d external slaves\n", internal, external);

@@ -44,7 +44,8 @@ jobs:
           cp LICENSE "$name/LICENSE.txt"
           cp -r LICENSES "$name/"
           cp scripts/fetch_slaves.py scripts/unlzx.py "$name/scripts/"
-          cp m68k/extra/OBJT "$name/m68k/extra/"
+          # OBJT for fetch_slaves.py; all of them for copying to LIBS:xfd
+          cp m68k/extra/* "$name/m68k/extra/"
           "$name/xfdnative.exe" --version
           zip -r -9 "$name.zip" "$name"
           sha256sum "$name.zip" > "$name.zip.sha256"

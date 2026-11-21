@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 (2026-11-21)
+
+- **Shrinkler, Cranker and L-Packer.** New slaves, written for xfd-native in
+  68000 assembly (`m68k/src`) and built into the binary:
+  - Shrinkler 4.0–4.7 executables (default, mini and overlap headers, with
+    any option) and data files written with `--header`.
+  - Cranker executables and data files.
+  - L-Packer 0.92–1.00 executables (LZ4, ZX0, DEFLATE) and data files.
+  Each has its own bounds-checked decoder, so a damaged file cannot write
+  outside its buffers. Checked against the packers themselves on over 500 packed
+  files (see the README).
+- The slaves in `m68k/extra` (OBJT and the three new ones) are built into
+  the binary and need no slave directory. `-n` turns them off as before. A
+  file of the same name in the slave directory replaces the built-in one.
+- `make blob` also assembles the new slaves.
+- New tests: a small test program (`tests/data`) packed with every packer
+  and mode must decrunch to the expected result.
+
 ## 0.2.0 (2026-11-20)
 
 - **Unlinking.** `--unlink SOURCE [DEST1 DEST2]` splits executables that a

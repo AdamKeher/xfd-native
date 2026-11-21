@@ -102,7 +102,40 @@ fi
 [ $rc -eq 0 ] && grep -q "^Not linked" "$TMP/log" && ok "--unlink leaves unlinked files alone" ||
 	bad "--unlink on a plain file (rc=$rc): $(cat "$TMP/log")"
 
-# 8. optional corpus
+# 8. the built-in extra slaves (m68k/extra, sources in m68k/src): files made
+#    by the packers from tests/data/sample.asm and mini.asm. An empty slave
+#    directory keeps any installed external slaves out of the way.
+D=tests/data
+mkdir "$TMP/noslaves"
+for f in shrinkler:Shrinkler shrinkler44:Shrinkler shrinkler-overlap:"Shrinkler Overlap" \
+	shrinkler-mini:"Shrinkler Mini" cranker:Cranker lpacker-lz4:"L-Packer LZ4" \
+	lpacker-zx0:"L-Packer ZX0" lpacker-deflate:"L-Packer Deflate"; do
+	file=${f%%:*}
+	name=${f#*:}
+	rm -f "$TMP/out"
+	"$BIN" -f -x "$TMP/noslaves" "$D/$file" "$TMP/out" >"$TMP/log" 2>&1
+	if grep -q "^Decrunching \"$name\" file" "$TMP/log" && cmp -s "$TMP/out" "$D/$file.expected"; then
+		ok "$name ($file)"
+	else
+		bad "$name ($file): $(cat "$TMP/log")"
+	fi
+done
+for f in shrinkler.data:"Shrinkler Data" cranker.data:"Cranker Data" lpacker.data:"L-Packer Data Deflate"; do
+	file=${f%%:*}
+	name=${f#*:}
+	rm -f "$TMP/out"
+	"$BIN" -f -x "$TMP/noslaves" "$D/$file" "$TMP/out" >"$TMP/log" 2>&1
+	if grep -q "^Decrunching \"$name\" file" "$TMP/log" && cmp -s "$TMP/out" "$D/sample.asm"; then
+		ok "$name ($file)"
+	else
+		bad "$name ($file): $(cat "$TMP/log")"
+	fi
+done
+"$BIN" -n -i "$D/shrinkler" >"$TMP/log" 2>&1
+grep -q "^Not crunched" "$TMP/log" && ok "--noextern leaves out the built-in extra slaves" ||
+	bad "--noextern with built-in slaves: $(cat "$TMP/log")"
+
+# 9. optional corpus
 if [ -n "${XFD_TEST_CORPUS:-}" ] && [ -d "$XFD_TEST_CORPUS" ]; then
 	for f in "$XFD_TEST_CORPUS"/*; do
 		case "$f" in *.expected) continue ;; esac

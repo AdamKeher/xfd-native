@@ -909,8 +909,7 @@ int xfd_load_external(const char *path)
 	FILE *f = fopen(path, "rb");
 	uint8_t *data;
 	long size;
-	uint32_t buf, result, seglist, foreman, slave, error;
-	int count = 0;
+	int count;
 
 	if (!f) return 0;
 	fseek(f, 0, SEEK_END);
@@ -927,17 +926,25 @@ int xfd_load_external(const char *path)
 		return 0;
 	}
 	fclose(f);
+	count = xfd_load_external_mem(data, (size_t)size);
+	free(data);
+	return count;
+}
 
+int xfd_load_external_mem(const uint8_t *data, size_t size)
+{
+	uint32_t buf, result, seglist, foreman, slave, error;
+	int count = 0;
+
+	if (size < 32 || size > 4 * 1024 * 1024) return 0;
 	buf = emu_alloc((uint32_t)size, MEMF_PUBLIC);
 	result = emu_alloc(4, MEMF_PUBLIC | MEMF_CLEAR);
 	if (!buf || !result) {
-		free(data);
 		emu_free(buf);
 		emu_free(result);
 		return 0;
 	}
-	emu_write_block(buf, data, (size_t)size);
-	free(data);
+	emu_write_block(buf, data, size);
 
 	/* LoadSeg() equivalent */
 	error = xfd_relocate(buf, (uint32_t)size, result, XFDREL_DEFAULT);

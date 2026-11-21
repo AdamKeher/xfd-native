@@ -21,6 +21,8 @@ int xfd_init(const uint8_t *blob, size_t len);
 /* Load one external slave file (a 68k hunk executable with an xfdForeMan).
  * Returns the number of slaves it added (0 if the file is not a slave). */
 int xfd_load_external(const char *path);
+/* The same for a slave file already in host memory. */
+int xfd_load_external_mem(const uint8_t *data, size_t size);
 /* Load every external slave in a directory, in case-insensitive name order
  * (the order AmigaDOS returns them from a WinUAE directory drive).
  * Returns the number of slaves added, or -1 if the directory can't be read. */
